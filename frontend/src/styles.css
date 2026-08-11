@@ -1,0 +1,328 @@
+:root {
+  --bg: #F4F4F1;
+  --surface: #FFFFFF;
+  --text: #1C1C1A;
+  --accent: #D43A2C;
+  --accent-secondary: #E3E1D9;
+  
+  font-family: 'DM Sans', system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', sans-serif;
+  margin-top: 0;
+  color: var(--text);
+  font-weight: 600;
+}
+
+h1 {
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: 1.25rem;
+  border-bottom: 1px solid var(--text);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+p {
+  margin-top: 0;
+  line-height: 1.5;
+}
+
+button, input {
+  font: inherit;
+}
+
+/* Structural Layout: Drafting Table */
+.app-shell {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 40px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-bottom: 2px solid var(--text);
+  padding-bottom: 24px;
+  margin-bottom: 40px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  position: relative;
+}
+
+/* Dividing line between panels */
+.layout::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 30px);
+  width: 1px;
+  background: var(--accent-secondary);
+}
+
+.panel {
+  background: transparent;
+}
+
+/* The Stamp Button (Signature Element) */
+.btn-stamp {
+  display: block;
+  width: 100%;
+  background: var(--accent);
+  color: #FFFFFF;
+  border: none;
+  padding: 24px;
+  font-size: 1.5rem;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  border-radius: 0;
+  margin: 24px 0;
+  transition: transform 0.1s ease;
+}
+
+.btn-stamp:active {
+  transform: scale(0.98);
+}
+
+.btn-stamp:disabled {
+  background: #A0A09B;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Secondary Buttons */
+button {
+  background: transparent;
+  border: 1px solid var(--text);
+  color: var(--text);
+  padding: 0.75rem 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 0;
+  transition: all 0.2s;
+}
+
+button:hover:not(:disabled) {
+  background: var(--text);
+  color: var(--surface);
+}
+
+button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+input[type='file'], input[type='text'] {
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid var(--accent-secondary);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 0;
+  font-family: 'DM Sans', sans-serif;
+}
+
+input[type='file']:focus, input[type='text']:focus {
+  outline: none;
+  border-color: var(--text);
+}
+
+.preview, .placeholder {
+  width: 100%;
+  margin-top: 16px;
+  min-height: 400px;
+  object-fit: contain;
+  background: var(--surface);
+  border: 1px solid var(--accent-secondary);
+}
+
+.placeholder {
+  display: grid;
+  place-items: center;
+  color: #8C8C85;
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.button-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.status-line, .muted {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.85rem;
+  color: #555550;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 8px;
+}
+
+.error {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.metric, .badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: 'Space Grotesk', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--text);
+  color: var(--surface);
+}
+
+.metric {
+  margin-bottom: 24px;
+}
+
+.badge-invoice {
+  background: var(--text);
+}
+
+.badge-ledger {
+  background: var(--text);
+}
+
+.badge-unknown {
+  background: #8C8C85;
+}
+
+.table, .rows, .raw-panel pre {
+  display: grid;
+  gap: 8px;
+}
+
+.table-row, .row-card {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 0;
+  align-items: center;
+  border: 1px solid var(--accent-secondary);
+  background: var(--surface);
+}
+
+.table-row label {
+  padding: 12px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #555550;
+  border-right: 1px solid var(--accent-secondary);
+}
+
+.table-row input, .row-card input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 12px;
+  font-weight: 500;
+}
+
+.table-row input:focus, .row-card input:focus {
+  outline: none;
+  background: #F9F9F8;
+}
+
+.row-card {
+  grid-template-columns: repeat(5, 1fr) auto;
+  border-bottom: 1px solid var(--accent-secondary);
+}
+
+.row-card input {
+  border-right: 1px solid var(--accent-secondary);
+}
+
+.row-card .delete-button {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  padding: 12px;
+}
+.row-card .delete-button:hover {
+  background: rgba(212, 58, 44, 0.1);
+  color: var(--accent);
+}
+
+.list {
+  padding-left: 20px;
+  font-size: 0.95rem;
+  margin-bottom: 24px;
+}
+
+.list li {
+  margin-bottom: 8px;
+}
+
+.raw-panel pre {
+  overflow: auto;
+  white-space: pre-wrap;
+  margin-bottom: 0;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--text);
+  font-family: monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 1024px) {
+  .layout {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  .layout::after {
+    display: none;
+  }
+  .row-card {
+    grid-template-columns: 1fr;
+    gap: 1px;
+    background: var(--accent-secondary);
+  }
+  .row-card input {
+    background: var(--surface);
+    border: none;
+  }
+}
