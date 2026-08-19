@@ -44,4 +44,119 @@ This is a specific OCR tool tailored to the flow:
 
 ## Setup & Running Locally
 
-*(Add your setup instructions here)*
+### Prerequisites
+
+- Windows 10 or later
+- Python 3.11 or later
+- Node.js 18 or later and npm
+- Tesseract OCR
+
+The backend uses Tesseract for image OCR. Install it on Windows with either of
+these options:
+
+```powershell
+winget install --id UB-Mannheim.TesseractOCR
+```
+
+Or install Tesseract from the [UB Mannheim Windows builds](https://github.com/UB-Mannheim/tesseract/wiki).
+The backend also checks the standard `Program Files` installation paths
+automatically.
+
+### Install the backend
+
+From the repository root, create and activate a virtual environment, then
+install the Python dependencies:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r backend\requirements.txt
+```
+
+If PowerShell blocks activation, run this once in the same terminal and retry:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+```
+
+Start the API from the repository root:
+
+```powershell
+python -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+The API is available at `http://127.0.0.1:8000`. Interactive API documentation
+is available at `http://127.0.0.1:8000/docs`.
+
+### Install and start the frontend
+
+Open a second terminal, navigate to the frontend directory, and install the
+Node dependencies:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open the URL printed by Vite, normally
+`http://localhost:5173`.
+
+### Check that the backend is running
+
+With the backend terminal still running, use PowerShell to verify its health:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/health
+```
+
+The response should contain `status: ok`.
+
+### Use the app
+
+1. Open the frontend at `http://localhost:5173`.
+2. Choose an image, PDF, CSV, or Excel file with the file picker. For OCR, use a clear invoice, bill, ledger, or passbook scan.
+3. Optionally enter a saved template ID. Leave it blank for automatic classification and extraction.
+4. Select **Extract Data** and wait for the structured fields, ledger rows, raw OCR text, confidence, and validation warnings.
+5. Review and edit the extracted fields or rows as needed.
+6. Select **Export CSV** for spreadsheet data or **Export Tally XML** for a Tally-compatible XML file.
+
+The three sample buttons can be used to explore the review and export interface
+without uploading a document or running OCR. Actual extraction requires the
+backend and Tesseract to be running.
+
+### Stop the app
+
+Press `Ctrl+C` in each terminal running the backend or frontend.
+
+## API Reference
+
+All endpoints are served by the backend at `http://127.0.0.1:8000`.
+
+- `GET /api/health` - Check that the API is running.
+- `POST /api/extract` - Upload a document as multipart form data using the `file` field. An optional `template_id` field can select a saved template.
+- `POST /api/export/csv` - Send an extraction response as JSON and receive a CSV download.
+- `POST /api/export/tally` - Send an extraction response as JSON and receive a Tally XML download.
+- `GET /api/templates` - List saved templates held by the running backend process.
+- `POST /api/templates` - Create a template.
+
+## Troubleshooting
+
+- **Frontend reports a network error:** Confirm the API terminal is running on port 8000. The current frontend expects `http://127.0.0.1:8000`.
+- **OCR fails or returns no text:** Confirm `tesseract --version` works in PowerShell and use a well-lit, high-resolution document image.
+- **Port already in use:** Stop the process using port 8000 or 5173, then restart the corresponding service on its expected port. The frontend currently uses fixed API and CORS URLs.
+- **PDF upload fails:** PDF support imports PyMuPDF when a PDF is processed. Install it in the activated environment with `python -m pip install pymupdf` if your environment does not already provide it.
+
+## Development Commands
+
+From `frontend`:
+
+```powershell
+npm run build
+npm run preview
+```
+
+The backend has no separate test command configured yet. The health endpoint
+and the interactive API documentation are useful smoke checks during local
+development.
