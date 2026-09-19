@@ -39,7 +39,8 @@ def analyze_quality(gray: np.ndarray) -> QualityProfile:
     p05, p95 = np.percentile(gray, [5, 95])
     laplacian_variance = float(cv2.Laplacian(gray, cv2.CV_64F).var())
     stddev = float(np.std(gray))
-    impulse_noise_fraction = float(np.mean((gray < 5) | (gray > 250)))
+    local_median = cv2.medianBlur(gray, 3)
+    impulse_noise_fraction = float(np.mean(cv2.absdiff(gray, local_median) >= 80))
     orientation = orientation_hint_degrees(gray)
     skew = 0.0 if orientation else estimate_skew_degrees(gray)
 

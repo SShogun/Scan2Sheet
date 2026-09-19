@@ -64,3 +64,10 @@ def test_processed_pixels_are_deterministic() -> None:
     assert first == second or np.array_equal(np.asarray(first.processed_image), np.asarray(second.processed_image))
     assert first.quality_profile == second.quality_profile
     assert first.transforms_applied == second.transforms_applied
+
+
+def test_clean_white_background_is_not_treated_as_impulse_noise() -> None:
+    white = Image.new("L", (800, 600), 255)
+    result = preprocess_image(white)
+    assert not result.quality_profile.is_noisy
+    assert "denoise:median3" not in result.transforms_applied
