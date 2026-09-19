@@ -5,11 +5,29 @@ import numpy as np
 import pytesseract
 from PIL import Image
 
+ANALYSIS_MAX_DIMENSION = 1600
+OSD_TIMEOUT_SECONDS = 5
+
+
+def bounded_analysis(gray: np.ndarray, max_dimension: int = ANALYSIS_MAX_DIMENSION) -> np.ndarray:
+    """Return a deterministic bounded grayscale representation for analysis only."""
+    height, width = gray.shape[:2]
+    largest = max(width, height)
+    if largest <= max_dimension:
+        return gray
+    scale = max_dimension / float(largest)
+    return cv2.resize(
+        gray,
+        (max(1, int(round(width * scale))), max(1, int(round(height * scale)))),
+        interpolation=cv2.INTER_AREA,
+    )
+
 
 def estimate_dominant_line_angle(gray: np.ndarray) -> float:
     """Estimate dominant page/text angle in OpenCV coordinates, modulo 180."""
-    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
-    min_line = max(50, int(min(gray.shape[:2]) * 0.18))
+    analysis = bounded_analysis(gray)
+    edges = cv2.Canny(analysis, 50, 150, apertureSize=3)
+    min_line = max(50, int(min(analysis.shape[:2]) * 0.18))
     lines = cv2.HoughLinesP(
         edges,
         1,
@@ -39,14 +57,28 @@ def estimate_dominant_line_angle(gray: np.ndarray) -> float:
     return float(np.median([item[0] for item in longest]))
 
 
-def orientation_hint_degrees(gray: np.ndarray) -> int:
-    """Return 90 when page structure is clearly vertical, else 0.
+def detect_orientation_degrees(gray: np.ndarray) -> int:
+    """Return the clockwise 0/90/180/270 correction reported by local Tesseract OSD.
 
-    The hint deliberately does not guess clockwise vs counter-clockwise. That
-    direction is resolved locally by Tesseract OSD only when a 90-degree
-    orientation correction is actually indicated.
+    OSD always receives a bounded analysis image and a hard timeout. Failures are
+    a deterministic safe no-op rather than an unbounded preprocessing stall.
     """
-    return 90 if abs(estimate_dominant_line_angle(gray)) > 45.0 else 0
+    analysis = bounded_analysis(gray)
+    try:
+        osd = pytesseract.image_to_osd(
+            Image.fromarray(analysis),
+            output_type=pytesseract.Output.DICT,
+            timeout=OSD_TIMEOUT_SECONDS,
+        )
+        rotation = int(osd.get("rotate", 0)) % 360
+    except (pytesseract.TesseractError, RuntimeError, ValueError, TypeError):
+        return 0
+    return rotation if rotation in {0, 90, 180, 270} else 0
+
+
+def orientation_hint_degrees(gray: np.ndarray) -> int:
+    """Backward-compatible alias for the bounded 0/90/180/270 detector."""
+    return detect_orientation_degrees(gray)
 
 
 def _rotate_quadrant(gray: np.ndarray, clockwise_degrees: int) -> np.ndarray:
@@ -62,21 +94,8 @@ def _rotate_quadrant(gray: np.ndarray, clockwise_degrees: int) -> np.ndarray:
     raise ValueError(f"Unsupported quadrant rotation: {clockwise_degrees}")
 
 
-def normalize_orientation(gray: np.ndarray) -> tuple[np.ndarray, int]:
-    """Normalize a clearly sideways page using local Tesseract OSD.
-
-    OSD is only consulted after image geometry indicates a coarse 90-degree
-    problem. Failure is a safe no-op; preprocessing never calls a network.
-    """
-    if orientation_hint_degrees(gray) == 0:
+def normalize_orientation(gray: np.ndarray, rotation: int | None = None) -> tuple[np.ndarray, int]:
+    correction = detect_orientation_degrees(gray) if rotation is None else int(rotation) % 360
+    if correction not in {90, 180, 270}:
         return gray, 0
-
-    try:
-        osd = pytesseract.image_to_osd(Image.fromarray(gray), output_type=pytesseract.Output.DICT)
-        rotation = int(osd.get("rotate", 0)) % 360
-    except (pytesseract.TesseractError, RuntimeError, ValueError, TypeError):
-        return gray, 0
-
-    if rotation not in {90, 180, 270}:
-        return gray, 0
-    return _rotate_quadrant(gray, rotation), rotation
+    return _rotate_quadrant(gray, correction), correction

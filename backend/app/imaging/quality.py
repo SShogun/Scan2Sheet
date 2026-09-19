@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 from .deskew import estimate_skew_degrees
-from .orientation import orientation_hint_degrees
+from .orientation import bounded_analysis
 
 BLUR_VARIANCE_THRESHOLD = 20.0
 LOW_CONTRAST_STDDEV_THRESHOLD = 15.0
@@ -32,17 +32,17 @@ class QualityProfile:
     warnings: tuple[str, ...]
 
 
-def analyze_quality(gray: np.ndarray) -> QualityProfile:
+def analyze_quality(gray: np.ndarray, *, orientation_degrees: int = 0) -> QualityProfile:
     if gray.ndim != 2:
         raise ValueError("Quality analysis requires a grayscale image.")
 
-    p05, p95 = np.percentile(gray, [5, 95])
-    laplacian_variance = float(cv2.Laplacian(gray, cv2.CV_64F).var())
-    stddev = float(np.std(gray))
-    local_median = cv2.medianBlur(gray, 3)
-    impulse_noise_fraction = float(np.mean(cv2.absdiff(gray, local_median) >= 80))
-    orientation = orientation_hint_degrees(gray)
-    skew = 0.0 if orientation else estimate_skew_degrees(gray)
+    analysis = bounded_analysis(gray)
+    p05, p95 = np.percentile(analysis, [5, 95])
+    laplacian_variance = float(cv2.Laplacian(analysis, cv2.CV_64F).var())
+    stddev = float(np.std(analysis))
+    local_median = cv2.medianBlur(analysis, 3)
+    impulse_noise_fraction = float(np.mean(cv2.absdiff(analysis, local_median) >= 80))
+    skew = 0.0 if orientation_degrees else estimate_skew_degrees(analysis)
 
     is_blurred = laplacian_variance < BLUR_VARIANCE_THRESHOLD
     is_low_contrast = stddev < LOW_CONTRAST_STDDEV_THRESHOLD
@@ -55,7 +55,7 @@ def analyze_quality(gray: np.ndarray) -> QualityProfile:
         warnings.append("low_contrast")
     if is_noisy:
         warnings.append("impulse_noise")
-    if orientation:
+    if orientation_degrees:
         warnings.append("orientation")
     if abs(skew) >= 0.5:
         warnings.append("skew")
@@ -63,14 +63,14 @@ def analyze_quality(gray: np.ndarray) -> QualityProfile:
     return QualityProfile(
         width=int(gray.shape[1]),
         height=int(gray.shape[0]),
-        mean_intensity=round(float(np.mean(gray)), 6),
+        mean_intensity=round(float(np.mean(analysis)), 6),
         intensity_stddev=round(stddev, 6),
         p05=round(float(p05), 6),
         p95=round(float(p95), 6),
         dynamic_range=round(float(p95 - p05), 6),
         laplacian_variance=round(laplacian_variance, 6),
         impulse_noise_fraction=round(impulse_noise_fraction, 8),
-        orientation_degrees=orientation,
+        orientation_degrees=orientation_degrees,
         estimated_skew_degrees=round(skew, 6),
         is_blurred=is_blurred,
         is_low_contrast=is_low_contrast,

@@ -10,6 +10,7 @@ MIN_DESKEW_DEGREES = 0.5
 
 
 def estimate_skew_degrees(gray: np.ndarray) -> float:
+    # estimate_dominant_line_angle performs Hough analysis on a bounded view.
     angle = estimate_dominant_line_angle(gray)
     if abs(angle) > 45.0:
         return 0.0
