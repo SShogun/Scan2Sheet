@@ -22,3 +22,7 @@ backend/.env
 frontend/.env
 data/exports/
 data/temp/
+
+# Generated OCR regression images
+tests/ocr_fixtures/**/*.png
+tests/ocr_fixtures/**/*.jpg
