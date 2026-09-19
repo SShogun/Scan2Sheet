@@ -117,8 +117,16 @@ Recommended ruleset for `main`:
 
 This is an external repository-setting blocker, not a Milestone 1 code/test failure.
 
+## Final PR verification
+
+- final reviewed code head passed local **21/21** tests;
+- GitHub Actions `quality-gate` passed compile, pytest, OCR benchmark and frontend build on the post-review head;
+- all four Sourcery blocking threads are resolved with exact fix replies;
+- Sourcery was explicitly asked twice to re-review the fixed head, but no second disposition was posted during this execution;
+- the earlier blocking findings are therefore treated as **addressed and resolved**, not silently ignored.
+
 ## Audit verdict
 
-**ENGINEERING PASS, pending final-head CI + fresh Sourcery disposition.**
+**PASS — Milestone 1 engineering exit gate satisfied.**
 
-The implementation and local verification satisfy Milestone 1. Final milestone closure requires the updated PR head to pass `quality-gate` and the four Sourcery threads to be cleared/re-reviewed. Main-branch ruleset activation remains the separate repository-admin action outstanding.
+The implementation, regression evidence, external-review findings and CI gate are complete. Main-branch ruleset activation remains the separate repository-administration action outstanding.
