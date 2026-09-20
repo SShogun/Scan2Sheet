@@ -10,7 +10,7 @@ from .base import OCREngine
 from .experimental import ExperimentalEngine
 from .router import OCRRouter
 from .tesseract import TesseractEngine, configure_tesseract
-from .types import OCRResult
+from .types import OCRError, OCRResult, OCRTimeoutError
 
 
 _DEFAULT_TESSERACT = TesseractEngine()
@@ -42,7 +42,12 @@ def _preprocess_image(image: Image.Image) -> Image.Image:
 
 def _ocr_image(image: Image.Image) -> tuple[str, float]:
     """Backward-compatible tuple API backed by the primary OCR router."""
-    result = _DEFAULT_ROUTER.recognize(image)
+    try:
+        result = _DEFAULT_ROUTER.recognize(image)
+    except OCRTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except OCRError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return result.text, result.confidence
 
 

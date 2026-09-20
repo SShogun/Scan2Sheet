@@ -4,11 +4,10 @@ import os
 import shutil
 from typing import Any
 
-from fastapi import HTTPException
 from PIL import Image
 import pytesseract
 
-from .types import OCRResult
+from .types import OCRError, OCRResult, OCRTimeoutError
 
 
 TESSERACT_CONFIG = "--oem 1 --psm 3"
@@ -42,11 +41,10 @@ class TesseractEngine:
                 timeout=TESSERACT_TIMEOUT_SECONDS,
             ).strip()
         except pytesseract.TesseractError as exc:
-            raise HTTPException(status_code=500, detail=f"OCR failed: {exc}") from exc
+            raise OCRError(f"OCR failed: {exc}") from exc
         except RuntimeError as exc:
-            raise HTTPException(
-                status_code=504,
-                detail="OCR timed out. Use a smaller or cleaner image.",
+            raise OCRTimeoutError(
+                "OCR timed out. Use a smaller or cleaner image."
             ) from exc
 
         text_length_score = min(100.0, max(0.0, len(raw_text) * 2.5))

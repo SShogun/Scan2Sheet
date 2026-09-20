@@ -40,7 +40,7 @@ def test_2a_02_tesseract_engine_preserves_legacy_success_semantics(monkeypatch) 
 
 
 def test_2a_03_tesseract_error_retains_500_api_behavior(monkeypatch) -> None:
-    from backend.app.ocr.tesseract import TesseractEngine
+    from backend.app.ocr import _ocr_image
     import backend.app.ocr.tesseract as module
 
     def fail(*args, **kwargs):
@@ -49,14 +49,14 @@ def test_2a_03_tesseract_error_retains_500_api_behavior(monkeypatch) -> None:
     monkeypatch.setattr(module.pytesseract, "image_to_string", fail)
 
     with pytest.raises(HTTPException) as exc:
-        TesseractEngine().recognize(Image.new("L", (20, 20), 255))
+        _ocr_image(Image.new("L", (20, 20), 255))
 
     assert exc.value.status_code == 500
     assert exc.value.detail.startswith("OCR failed:")
 
 
 def test_2a_04_tesseract_timeout_retains_504_api_behavior(monkeypatch) -> None:
-    from backend.app.ocr.tesseract import TesseractEngine
+    from backend.app.ocr import _ocr_image
     import backend.app.ocr.tesseract as module
 
     def timeout(*args, **kwargs):
@@ -65,7 +65,7 @@ def test_2a_04_tesseract_timeout_retains_504_api_behavior(monkeypatch) -> None:
     monkeypatch.setattr(module.pytesseract, "image_to_string", timeout)
 
     with pytest.raises(HTTPException) as exc:
-        TesseractEngine().recognize(Image.new("L", (20, 20), 255))
+        _ocr_image(Image.new("L", (20, 20), 255))
 
     assert exc.value.status_code == 504
     assert exc.value.detail == "OCR timed out. Use a smaller or cleaner image."
@@ -93,15 +93,20 @@ def test_2a_06_parser_does_not_import_tesseract_directly() -> None:
     assert "from pytesseract" not in source
 
 
-def test_2a_07_ocr_package_has_no_accounting_rule_imports() -> None:
-    forbidden = ("extractors", "validators", "schemas")
+def test_2a_07_engine_layer_has_no_parser_or_http_dependencies() -> None:
+    forbidden = ("extractors", "validators", "schemas", "fastapi")
+    engine_files = [
+        "base.py",
+        "experimental.py",
+        "router.py",
+        "tesseract.py",
+        "types.py",
+    ]
 
-    for path in (ROOT / "backend" / "app" / "ocr").glob("*.py"):
+    for name in engine_files:
+        path = ROOT / "backend" / "app" / "ocr" / name
         source = path.read_text()
-        assert not any(
-            f".{name}" in source or f"app.{name}" in source
-            for name in forbidden
-        ), path
+        assert not any(token in source for token in forbidden), path
 
 
 def test_2a_08_router_accepts_abstaining_secondary_without_replacing_primary() -> None:

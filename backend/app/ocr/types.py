@@ -4,6 +4,14 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Mapping
 
 
+class OCRError(RuntimeError):
+    """Base OCR-engine failure independent from HTTP/API transport."""
+
+
+class OCRTimeoutError(OCRError):
+    """OCR engine exceeded its bounded execution time."""
+
+
 @dataclass(frozen=True)
 class OCRResult:
     text: str
