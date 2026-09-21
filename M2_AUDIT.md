@@ -6,16 +6,16 @@ Current implementation head before this audit/evidence commit: `3cd780dc38f933a8
 
 ## Audit state
 
-This document is intentionally created **before** the Milestone 2 PR review cycle.
+The Milestone 2 PR/CI repair cycle has completed for the current implementation.
 
-Current engineering evidence is GREEN for Python/OCR work, but final Milestone 2 sign-off remains pending:
+Engineering gates are GREEN on the repaired PR head. Automated external review
+was requested, but both available PR-review bots were quota-blocked. Sourcery
+created no substantive inline review threads; that external quota limitation is
+recorded explicitly rather than treated as a successful review.
 
-1. GitHub PR `quality-gate`;
-2. automated Sourcery review;
-3. inspection/repair of every legitimate finding;
-4. final CI on the repaired PR head.
-
-The final section of this audit must be updated after those gates.
+An independent full PR-diff review was performed during the blocked external
+review window. Its two legitimate reproducibility/integrity findings were fixed
+before the final CI run.
 
 ## Scope verification
 
@@ -193,13 +193,23 @@ PASS for current M2 diff.
 
 ## Clean-repository reproduction
 
-Partial local proof before PR:
+PASS on GitHub Actions.
 
-- direct clone from the execution sandbox was blocked by external DNS/network restrictions;
-- exact committed files were reconstructed from GitHub repository blobs;
-- compile/tests/model reproduction/held-out evaluation passed on that exact implementation state.
+The authoritative clean runner checked out the PR merge ref and completed:
 
-The authoritative clean-environment proof is therefore the pending GitHub Actions PR `quality-gate`, which performs checkout/install/test/model-reproduction/frontend-build in a fresh runner.
+- dependency installation;
+- Python compile check;
+- full pytest suite;
+- OCR benchmark smoke run;
+- restricted-model reproduction;
+- held-out benchmark reproduction;
+- Node setup;
+- frontend dependency installation/build.
+
+Final repaired-head run: GitHub Actions `ci` run **#9** / run ID
+`35606510633`.
+
+Result: **quality-gate SUCCESS**.
 
 ## Token / orchestration evidence
 
@@ -215,14 +225,18 @@ Historical root/subagent/cache/output token counters are unavailable from the ex
 3. Full phone-photo/perspective OCR remains a known M1 limitation and is not solved by the restricted token recognizer.
 4. Tesseract's existing confidence heuristic remains unchanged.
 5. Milestone 3 arbitration and accounting-validation-based candidate choice are not implemented.
-6. PR-level frontend production build/clean-install evidence is still pending at this stage of the audit.
-7. Sourcery automatically attempted PR #2 review but reported that the 7-day review-budget quota was exhausted; no substantive Sourcery threads were produced. Copilot review was independently quota-blocked.
+6. Automated external PR review remains quota-blocked: Sourcery exhausted its
+   250,000-diff-character 7-day budget and Copilot also reported a quota limit.
+   Sourcery produced **0 substantive inline threads**. This is an external
+   review-service limitation, not a hidden code/CI pass.
+7. The GitHub Actions log carries Node/action deprecation warnings, but they do
+   not fail the current quality gate.
 
 ## Pre-PR verdict
 
-**CONDITIONAL PASS — implementation and local Python/OCR gates satisfy the Milestone 2 technical plan.**
-
-Final Milestone 2 exit verdict is withheld until PR CI and automated external review complete.
+The pre-PR audit was **CONDITIONAL PASS** pending clean CI and PR review. That
+condition led directly to the clean-run reproducibility failure and repair
+described below.
 
 ## PR / review cycle — interim
 
@@ -238,9 +252,48 @@ Final Milestone 2 exit verdict is withheld until PR CI and automated external re
 - Sourcery auto-review: **attempted but quota-blocked**; no substantive Sourcery
   inline threads exist to inspect or resolve.
 - Copilot auto-review: quota-blocked.
-- Final repaired-head CI: **pending**.
+- Final repaired-head CI: **PASS** — GitHub Actions run #9 / `35606510633`.
+- Final repaired-head pytest: **46/46 PASS**.
+- OCR benchmark smoke run: **PASS**.
+- Restricted model reproduction and exact held-out benchmark comparison: **PASS**.
+- Frontend production build: **PASS** (`vite build`, completed successfully).
+- Held-out metrics remained unchanged:
+  - experimental supported exact: **33.3%**;
+  - experimental unknown abstention: **100%**;
+  - Tesseract supported exact: **53.3%**.
 
 ## Final PR / review status
 
-_Pending repaired-head CI. The final verdict is updated only after the full gate,
-including frontend build, completes._
+PR **#2** is open and contains the single Milestone 2 integration/review cycle.
+
+### Automated external review
+
+- Sourcery auto-review was requested/attempted.
+- Sourcery response: review budget exhausted; another substantive review cannot
+  be obtained until its quota resets.
+- Substantive Sourcery inline threads inspected: **0**.
+- Copilot PR review was also quota-blocked.
+- These quota responses are **not** counted as code-review approval.
+
+### Independent review + repair
+
+Because both external review bots were unavailable, an independent full PR-diff
+review was performed instead. It found two legitimate issues:
+
+1. raw model reproducibility depended on unpinned NumPy/OpenCV/Pillow versions;
+2. the held-out evaluator echoed the manifest's expected model hash without
+   independently hashing and validating the supplied model file.
+
+Both were repaired in commit
+`ece58293c731b20df2a0bdc6f8aefc68c333f65a`, with regression tests.
+
+### Final engineering verdict
+
+**PASS — Milestone 2 implementation, regression, reproducibility, fallback,
+provenance, clean-run CI and frontend build gates are satisfied.**
+
+**External-review status: BLOCKED BY REVIEW-SERVICE QUOTA, explicitly recorded.**
+
+This audit does not claim a Sourcery approval that did not occur. No substantive
+Sourcery thread was skipped. Milestone 3 arbitration remains out of scope and
+has not been started.
