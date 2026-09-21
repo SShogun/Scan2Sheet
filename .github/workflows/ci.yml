@@ -28,10 +28,10 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
 
-      - name: Install Tesseract
+      - name: Install OCR system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y tesseract-ocr
+          sudo apt-get install -y tesseract-ocr fonts-dejavu-core
 
       - name: Install backend dependencies
         run: |
@@ -39,13 +39,27 @@ jobs:
           python -m pip install -r backend/requirements-dev.txt
 
       - name: Python compile check
-        run: python -m compileall -q backend tests
+        run: python -m compileall -q backend tests tools
 
       - name: Backend and OCR regression tests
         run: pytest -q
 
       - name: OCR benchmark smoke run
         run: python tests/ocr_benchmark.py --output /tmp/ocr-benchmark.json --kind ci-regression --git-commit "$GITHUB_SHA"
+
+      - name: Reproduce restricted recognizer model
+        run: |
+          EXPECTED_HASH="$(cat experiments/m2b-hog-nn-v1/model_hash.txt)"
+          python tools/train_restricted_recognizer.py --output-model /tmp/restricted_hog_nn_v1.npz --experiment-dir /tmp/m2b-repro --expected-hash "$EXPECTED_HASH"
+          python tools/evaluate_restricted_recognizer.py --model /tmp/restricted_hog_nn_v1.npz --output /tmp/m2b-benchmark.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          reproduced = json.loads(Path("/tmp/m2b-benchmark.json").read_text())
+          committed = json.loads(Path("artifacts/benchmarks/m2b_recognizer.json").read_text())
+          if reproduced != committed:
+              raise SystemExit("M2B held-out benchmark did not reproduce exactly.")
+          PY
 
       - name: Set up Node
         uses: actions/setup-node@v4

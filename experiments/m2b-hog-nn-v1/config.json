@@ -1,0 +1,26 @@
+{
+  "classifier": "1-nearest-neighbor over synthetic glyph features",
+  "engine_name": "experimental-restricted-v1",
+  "feature_extractor": {
+    "geometry_weight": 1.5,
+    "glyph_canvas": [32, 32],
+    "hog": {"bins": 9, "block": [16, 16], "cell": [8, 8], "stride": [8, 8], "win": [32, 32]},
+    "pixel_thumbnail": [16, 16],
+    "pixel_weight": 0.75
+  },
+  "heldout_test_used_for_selection": false,
+  "min_token_confidence": 10.0,
+  "model_committed": false,
+  "model_file": "artifacts/models/restricted_hog_nn_v1.npz (generated, gitignored)",
+  "model_reproduction_command": "python tools/train_restricted_recognizer.py --expected-hash 275530db43b188bae28362bba7d644e3a3d9a843795116cb18a95b975bf5acb8",
+  "model_sha256": "275530db43b188bae28362bba7d644e3a3d9a843795116cb18a95b975bf5acb8",
+  "not_general_purpose_ocr": true,
+  "restricted_vocabulary": "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,/-:",
+  "run_id": "m2b-hog-nn-v1",
+  "runtime_dependencies_added": [],
+  "scope": "restricted-token",
+  "segmentation": "single-line vertical ink projection; max 32 glyphs",
+  "status": "frozen-before-heldout-evaluation",
+  "threshold_calibration": "train nearest-neighbor distances + validation known/unknown glyphs",
+  "training_splits": ["train", "validation"]
+}
