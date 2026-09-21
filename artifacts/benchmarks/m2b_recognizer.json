@@ -1,0 +1,363 @@
+{
+  "details": [
+    {
+      "expected": "98,765.43",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": false,
+        "confidence": 32.5648,
+        "reason": "",
+        "text": "98,765.43"
+      },
+      "id": "test-000-v0",
+      "kind": "amount",
+      "tesseract": {
+        "exact_match": true,
+        "text": "98,765.43"
+      }
+    },
+    {
+      "expected": "1,001.01",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-001-v0",
+      "kind": "amount",
+      "tesseract": {
+        "exact_match": true,
+        "text": "1,001.01"
+      }
+    },
+    {
+      "expected": "600.00",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-002-v0",
+      "kind": "amount",
+      "tesseract": {
+        "exact_match": true,
+        "text": "600.00"
+      }
+    },
+    {
+      "expected": "42.50",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-003-v0",
+      "kind": "amount",
+      "tesseract": {
+        "exact_match": true,
+        "text": "42.50"
+      }
+    },
+    {
+      "expected": "30/06/2026",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-004-v0",
+      "kind": "date",
+      "tesseract": {
+        "exact_match": true,
+        "text": "30/06/2026"
+      }
+    },
+    {
+      "expected": "11-01-2025",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-005-v0",
+      "kind": "date",
+      "tesseract": {
+        "exact_match": true,
+        "text": "11-01-2025"
+      }
+    },
+    {
+      "expected": "05/12/26",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": false,
+        "confidence": 77.5,
+        "reason": "",
+        "text": "05/12/26"
+      },
+      "id": "test-006-v0",
+      "kind": "date",
+      "tesseract": {
+        "exact_match": true,
+        "text": "05/12/26"
+      }
+    },
+    {
+      "expected": "INV-1I0O",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": false,
+        "confidence": 63.3778,
+        "reason": "",
+        "text": "INV-1I0O"
+      },
+      "id": "test-007-v0",
+      "kind": "invoice_identifier",
+      "tesseract": {
+        "exact_match": false,
+        "text": "INV-1100"
+      }
+    },
+    {
+      "expected": "ZX:O01I",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-008-v0",
+      "kind": "invoice_identifier",
+      "tesseract": {
+        "exact_match": false,
+        "text": "ZX: 0011"
+      }
+    },
+    {
+      "expected": "PO-900/AB",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-009-v0",
+      "kind": "invoice_identifier",
+      "tesseract": {
+        "exact_match": false,
+        "text": "P0-900/AB"
+      }
+    },
+    {
+      "expected": "22ABCDE9876M1Z1",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-010-v0",
+      "kind": "gstin_like",
+      "tesseract": {
+        "exact_match": true,
+        "text": "22ABCDE9876M1Z1"
+      }
+    },
+    {
+      "expected": "09QAZWS1234X1Z6",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-011-v0",
+      "kind": "gstin_like",
+      "tesseract": {
+        "exact_match": false,
+        "text": "O09QAZWS1234X12Z6"
+      }
+    },
+    {
+      "expected": "18LMNOP2468Q1Z4",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-012-v0",
+      "kind": "gstin_like",
+      "tesseract": {
+        "exact_match": false,
+        "text": "18LMNOP2468Q12Z4"
+      }
+    },
+    {
+      "expected": "O01I10",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": false,
+        "confidence": 77.5,
+        "reason": "",
+        "text": "O01I10"
+      },
+      "id": "test-013-v0",
+      "kind": "confusion",
+      "tesseract": {
+        "exact_match": false,
+        "text": "001110"
+      }
+    },
+    {
+      "expected": "1I0O",
+      "expected_abstain": false,
+      "experimental": {
+        "abstained": false,
+        "confidence": 77.5,
+        "reason": "",
+        "text": "1I0O"
+      },
+      "id": "test-014-v0",
+      "kind": "confusion",
+      "tesseract": {
+        "exact_match": false,
+        "text": "1100"
+      }
+    },
+    {
+      "expected": "INV+102",
+      "expected_abstain": true,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-015-v0",
+      "kind": "unknown",
+      "tesseract": {
+        "exact_match": null,
+        "text": "INV+102"
+      }
+    },
+    {
+      "expected": "\u20ac99.00",
+      "expected_abstain": true,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-016-v0",
+      "kind": "unknown",
+      "tesseract": {
+        "exact_match": null,
+        "text": "\u20ac99.00"
+      }
+    },
+    {
+      "expected": "A=B",
+      "expected_abstain": true,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-017-v0",
+      "kind": "unknown",
+      "tesseract": {
+        "exact_match": null,
+        "text": ""
+      }
+    },
+    {
+      "expected": "12%34",
+      "expected_abstain": true,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-018-v0",
+      "kind": "unknown",
+      "tesseract": {
+        "exact_match": null,
+        "text": "12%34"
+      }
+    },
+    {
+      "expected": "A;B",
+      "expected_abstain": true,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-019-v0",
+      "kind": "unknown",
+      "tesseract": {
+        "exact_match": null,
+        "text": ""
+      }
+    },
+    {
+      "expected": "INV!2",
+      "expected_abstain": true,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-020-v0",
+      "kind": "unknown",
+      "tesseract": {
+        "exact_match": null,
+        "text": "INV!2"
+      }
+    },
+    {
+      "expected": "Q&1",
+      "expected_abstain": true,
+      "experimental": {
+        "abstained": true,
+        "confidence": 0.0,
+        "reason": "unknown_or_uncertain",
+        "text": ""
+      },
+      "id": "test-021-v0",
+      "kind": "unknown",
+      "tesseract": {
+        "exact_match": null,
+        "text": "Qg&l"
+      }
+    }
+  ],
+  "experimental_known_abstention_rate": 0.6666666666666666,
+  "experimental_known_exact_accuracy": 0.3333333333333333,
+  "experimental_unknown_abstention_rate": 1.0,
+  "known_samples": 15,
+  "model_sha256": "db5a625cc660eba09f37c9523f6a0769c8e916257a85a10e79c221400e1e3981",
+  "tesseract_known_exact_accuracy": 0.5333333333333333,
+  "unknown_samples": 7
+}

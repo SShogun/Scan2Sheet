@@ -1,8 +1,8 @@
 import re
 import io
 from PIL import Image
-import pytesseract
 from fastapi import HTTPException
+from .ocr import _ocr_data, _ocr_image, _preprocess_image
 from .schemas import Template
 from .utils import GSTIN_PATTERN, DATE_PATTERN, AMOUNT_PATTERN, _normalize_text, _classify_document, _extract_first_match, _parse_float, _extract_amount_value, _extract_label_value, _extract_invoice_amount
 
@@ -424,10 +424,8 @@ def _process_with_template(image: Image.Image, template: Template) -> tuple[dict
         region = image.crop((x, y, x + w, y + h))
         processed_region = _preprocess_image(region)
         
-        _configure_tesseract()
-        try:
-            df = pytesseract.image_to_data(processed_region, output_type=pytesseract.Output.DICT)
-        except Exception:
+        df = _ocr_data(processed_region)
+        if not df.get("text"):
             continue
             
         n_boxes = len(df['text'])

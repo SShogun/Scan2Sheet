@@ -1,0 +1,29 @@
+{
+  "expanded_samples_sha256": "7ea8668678e77bebafdc60773fc1fbc12134a6864d8e9c635532285073e04e12",
+  "generator": "tools/recognizer_dataset.py",
+  "purpose": "model selection and threshold calibration only",
+  "restricted_vocabulary": "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,/-:",
+  "schema": 2,
+  "split": "validation",
+  "tokens": [
+    {"expected_abstain": false, "kind": "amount", "text": "12,345.67"},
+    {"expected_abstain": false, "kind": "amount", "text": "80.10"},
+    {"expected_abstain": false, "kind": "amount", "text": "9,001.05"},
+    {"expected_abstain": false, "kind": "date", "text": "28/02/2026"},
+    {"expected_abstain": false, "kind": "date", "text": "09-10-2025"},
+    {"expected_abstain": false, "kind": "invoice_identifier", "text": "INV-0O1I"},
+    {"expected_abstain": false, "kind": "invoice_identifier", "text": "PO:1I0O"},
+    {"expected_abstain": false, "kind": "gstin_like", "text": "19ABCDE4321K1Z7"},
+    {"expected_abstain": false, "kind": "gstin_like", "text": "32QWERT5678Y2Z4"},
+    {"expected_abstain": false, "kind": "confusion", "text": "0O1I"},
+    {"expected_abstain": true, "kind": "unknown", "text": "INV@102"},
+    {"expected_abstain": true, "kind": "unknown", "text": "₹118.00"},
+    {"expected_abstain": true, "kind": "unknown", "text": "AB_C"},
+    {"expected_abstain": true, "kind": "unknown", "text": "12#34"},
+    {"expected_abstain": true, "kind": "unknown", "text": "A+B"},
+    {"expected_abstain": true, "kind": "unknown", "text": "A=B"},
+    {"expected_abstain": true, "kind": "unknown", "text": "10%"},
+    {"expected_abstain": true, "kind": "unknown", "text": "INV?1"}
+  ],
+  "variants_per_token": 1
+}
