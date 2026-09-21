@@ -1,0 +1,5 @@
+# Exact versions that affect deterministic M2B model generation.
+# These are existing project dependencies/transitive dependencies, not new OCR packages.
+numpy==2.4.6
+opencv-python==4.14.0.94
+Pillow==11.3.0

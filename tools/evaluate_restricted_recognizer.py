@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -24,6 +25,13 @@ def evaluate(model_path: Path, train_manifest_path: Path, test_manifest_path: Pa
     if train_hashes & test_hashes:
         raise RuntimeError("Train/test leakage detected.")
 
+    actual_model_sha256 = hashlib.sha256(model_path.read_bytes()).hexdigest()
+    expected_model_sha256 = str(test_manifest["frozen_model_sha256"])
+    if actual_model_sha256 != expected_model_sha256:
+        raise RuntimeError(
+            f"Model hash mismatch: {actual_model_sha256} != {expected_model_sha256}"
+        )
+
     engine = RestrictedExperimentalEngine(model_path)
     known = correct = known_abstained = unknown = unknown_safe = tess_correct = 0; details = []
     for sample in test_manifest["samples"]:
@@ -39,7 +47,7 @@ def evaluate(model_path: Path, train_manifest_path: Path, test_manifest_path: Pa
             known += 1; correct += int(not result.abstained and result.text == sample["text"]); known_abstained += int(result.abstained); tess_exact = tess_text == sample["text"]; tess_correct += int(tess_exact)
         details.append({"id": sample["id"], "kind": sample["kind"], "expected": sample["text"], "expected_abstain": expected_abstain, "experimental": {"text": result.text, "confidence": round(float(result.confidence), 4), "abstained": result.abstained, "reason": result.metadata.get("reason", "")}, "tesseract": {"text": tess_text, "exact_match": tess_exact}})
 
-    payload = {"model_sha256": test_manifest["frozen_model_sha256"], "known_samples": known, "experimental_known_exact_accuracy": correct / known, "experimental_known_abstention_rate": known_abstained / known, "unknown_samples": unknown, "experimental_unknown_abstention_rate": unknown_safe / unknown, "tesseract_known_exact_accuracy": tess_correct / known, "details": details}
+    payload = {"model_sha256": actual_model_sha256, "known_samples": known, "experimental_known_exact_accuracy": correct / known, "experimental_known_abstention_rate": known_abstained / known, "unknown_samples": unknown, "experimental_unknown_abstention_rate": unknown_safe / unknown, "tesseract_known_exact_accuracy": tess_correct / known, "details": details}
     output_path.parent.mkdir(parents=True, exist_ok=True); output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"); return payload
 
 

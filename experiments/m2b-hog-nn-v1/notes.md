@@ -13,8 +13,9 @@ The choice was frozen using train + validation only.
 - engine: `experimental-restricted-v1`
 - vocabulary: `ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,/-:`
 - generated model SHA-256:
-  `275530db43b188bae28362bba7d644e3a3d9a843795116cb18a95b975bf5acb8`
+  `db5a625cc660eba09f37c9523f6a0769c8e916257a85a10e79c221400e1e3981`
 - runtime dependencies added: none
+- reproducibility pins: `numpy==2.4.6`, `opencv-python==4.14.0.94`, `Pillow==11.3.0`
 - model binary committed: no
 - artifact is regenerated deterministically from the committed manifests
 

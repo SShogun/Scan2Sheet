@@ -66,8 +66,11 @@ was performed.
 
 The binary `.npz` model is generated and gitignored. The repository stores the
 deterministic manifests, trainer/generator code, frozen config, expected model
-SHA-256 and held-out benchmark. A clean checkout regenerates the model locally;
-there is no network/model download.
+SHA-256 and held-out benchmark. The experiment-sensitive NumPy/OpenCV/Pillow
+versions are pinned in `backend/requirements-repro.txt` because the raw model
+bytes depend on those numeric/image-library versions. A clean checkout using the
+pinned development environment regenerates the model locally; there is no
+network/model download.
 
 ## Held-out conclusion
 

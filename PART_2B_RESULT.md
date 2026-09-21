@@ -32,7 +32,7 @@ Target token classes are monetary values, dates, invoice identifiers and GSTIN-l
 
 ## RED → GREEN evidence
 
-Part 2B adds 12 executable tests covering the required RED-20…RED-25 contracts plus model/evidence integrity.
+Part 2B initially added 12 executable tests covering the required RED-20…RED-25 contracts plus model/evidence integrity.
 
 Final local Python gate on the repaired exact implementation state:
 
@@ -48,7 +48,7 @@ A real CI-path defect was found during exact-state verification: direct executio
 
 SHA-256:
 
-`275530db43b188bae28362bba7d644e3a3d9a843795116cb18a95b975bf5acb8`
+`db5a625cc660eba09f37c9523f6a0769c8e916257a85a10e79c221400e1e3981`
 
 The generated model binary is not committed. It is reproduced from committed public synthetic manifests.
 
@@ -78,6 +78,24 @@ Unknown / out-of-scope held-out inputs:
 The experiment demonstrates reproducibility, provenance, held-out separation and safe abstention. It does **not** demonstrate superiority over Tesseract.
 
 Tesseract remains the authoritative primary engine. The experimental recognizer remains feature-flagged and only provides an optional candidate. Arbitration/promotion is deferred to Milestone 3.
+
+## PR clean-run repair
+
+The first GitHub PR quality-gate exposed dependency drift that the earlier local
+environment did not: 39 tests passed and 5 model-dependent tests errored because
+the clean runner regenerated a different raw model hash.
+
+The repair freezes the experiment-sensitive versions already used by the clean
+runner:
+
+- `numpy==2.4.6`;
+- `opencv-python==4.14.0.94`;
+- `Pillow==11.3.0`.
+
+The evaluator was also hardened to hash the actual model file and reject it if it
+does not match the frozen held-out manifest. Two regression tests cover these
+reproducibility requirements. This is a reproducibility repair, not post-held-out
+hyperparameter tuning.
 
 ## Remaining gate
 

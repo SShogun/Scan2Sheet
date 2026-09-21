@@ -27,6 +27,7 @@ jobs:
           cache-dependency-path: |
             backend/requirements.txt
             backend/requirements-dev.txt
+            backend/requirements-repro.txt
 
       - name: Install OCR system dependencies
         run: |

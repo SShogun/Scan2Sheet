@@ -10,6 +10,7 @@ from PIL import Image
 from backend.app.ocr.experimental import RestrictedExperimentalEngine
 from backend.app.ocr.router import OCRRouter
 from backend.app.ocr.types import OCRResult
+from tools.evaluate_restricted_recognizer import evaluate
 from tools.recognizer_dataset import load_manifest, render_sample
 from tools.train_restricted_recognizer import train
 
@@ -233,3 +234,32 @@ def test_heldout_report_records_safe_abstention_without_claiming_superiority() -
     assert report["experimental_unknown_abstention_rate"] == 1.0
     assert report["experimental_known_exact_accuracy"] > 0.0
     assert report["model_sha256"] == EXPECTED_MODEL_HASH
+
+
+def test_evaluator_rejects_model_hash_mismatch(
+    reproduced_model: Path,
+    tmp_path: Path,
+) -> None:
+    mutated = tmp_path / "mutated-model.npz"
+    mutated.write_bytes(reproduced_model.read_bytes() + b"x")
+
+    with pytest.raises(RuntimeError, match="Model hash mismatch"):
+        evaluate(
+            mutated,
+            ROOT / "data/recognizer/train/manifest.json",
+            ROOT / "data/recognizer/test/manifest.json",
+            tmp_path / "heldout.json",
+        )
+
+
+def test_reproducibility_dependencies_are_pinned() -> None:
+    pins = {
+        line.strip()
+        for line in (ROOT / "backend/requirements-repro.txt").read_text().splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+    assert pins == {
+        "numpy==2.4.6",
+        "opencv-python==4.14.0.94",
+        "Pillow==11.3.0",
+    }

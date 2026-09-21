@@ -132,7 +132,7 @@ Experiment: `m2b-hog-nn-v1`.
 
 Frozen generated model SHA-256:
 
-`275530db43b188bae28362bba7d644e3a3d9a843795116cb18a95b975bf5acb8`
+`db5a625cc660eba09f37c9523f6a0769c8e916257a85a10e79c221400e1e3981`
 
 Model strategy:
 
@@ -176,9 +176,7 @@ Candidate arbitration is intentionally not implemented in Milestone 2.
 
 ## Dependency / network provenance
 
-The main→M2 compare contains no modifications to `backend/requirements.txt` or `backend/requirements-dev.txt`.
-
-Milestone 2 therefore adds no runtime/development package dependency.
+Milestone 2 adds no new runtime/development package. After the first PR clean-run exposed raw-model hash drift across numeric/image-library versions, the repair adds `backend/requirements-repro.txt` to pin the existing experiment-sensitive packages (`numpy==2.4.6`, `opencv-python==4.14.0.94`, `Pillow==11.3.0`) for development/CI reproduction.
 
 Review of added M2 diff text found no added network client/API call, model-download URL, production endpoint, credential material or client-specific implementation. Mentions of “production/client” occur only in documentation statements declaring those items absent/out of scope.
 
@@ -218,7 +216,7 @@ Historical root/subagent/cache/output token counters are unavailable from the ex
 4. Tesseract's existing confidence heuristic remains unchanged.
 5. Milestone 3 arbitration and accounting-validation-based candidate choice are not implemented.
 6. PR-level frontend production build/clean-install evidence is still pending at this stage of the audit.
-7. Sourcery findings are pending because the Milestone 2 PR has not yet been opened at this audit snapshot.
+7. Sourcery automatically attempted PR #2 review but reported that the 7-day review-budget quota was exhausted; no substantive Sourcery threads were produced. Copilot review was independently quota-blocked.
 
 ## Pre-PR verdict
 
@@ -226,6 +224,23 @@ Historical root/subagent/cache/output token counters are unavailable from the ex
 
 Final Milestone 2 exit verdict is withheld until PR CI and automated external review complete.
 
+## PR / review cycle — interim
+
+- PR: **#2** — `Milestone 2: modular OCR and restricted experimental recognizer`.
+- First GitHub `quality-gate`: **FAILED** at pytest with **39 passed, 5 errors**.
+- Failure cause: clean-run model SHA differed from the unpinned local environment.
+- Clean-run SHA: `db5a625cc660eba09f37c9523f6a0769c8e916257a85a10e79c221400e1e3981`.
+- Independent diff review found the same reproducibility defect and a second
+  integrity problem: the held-out evaluator reported the manifest's expected
+  hash without independently verifying the supplied model file.
+- Repair: pin the existing experiment-sensitive dependency versions, make the
+  evaluator verify the actual model hash, and add two regression tests.
+- Sourcery auto-review: **attempted but quota-blocked**; no substantive Sourcery
+  inline threads exist to inspect or resolve.
+- Copilot auto-review: quota-blocked.
+- Final repaired-head CI: **pending**.
+
 ## Final PR / review status
 
-_Pending. This section will be updated after the single Milestone 2 PR, quality-gate, Sourcery review, legitimate repairs and final CI._
+_Pending repaired-head CI. The final verdict is updated only after the full gate,
+including frontend build, completes._
