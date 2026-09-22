@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    branches: [main, milestone-3a-integration]
 
 permissions:
   contents: read
@@ -42,6 +42,9 @@ jobs:
       - name: Python compile check
         run: python -m compileall -q backend tests tools
 
+      - name: M3A targeted arbitration tests
+        run: pytest -q tests/test_m3a_arbitration.py
+
       - name: Backend and OCR regression tests
         run: pytest -q
 
@@ -50,7 +53,7 @@ jobs:
 
       - name: Reproduce restricted recognizer model
         run: |
-          EXPECTED_HASH="$(cat experiments/m2b-hog-nn-v1/model_hash.txt)"
+          EXPECTED_HASH="$(cat experiments/m2b-hog-nn-v1/model_contract_hash.txt)"
           python tools/train_restricted_recognizer.py --output-model /tmp/restricted_hog_nn_v1.npz --experiment-dir /tmp/m2b-repro --expected-hash "$EXPECTED_HASH"
           python tools/evaluate_restricted_recognizer.py --model /tmp/restricted_hog_nn_v1.npz --output /tmp/m2b-benchmark.json
           python - <<'PY'
@@ -58,8 +61,14 @@ jobs:
           from pathlib import Path
           reproduced = json.loads(Path("/tmp/m2b-benchmark.json").read_text())
           committed = json.loads(Path("artifacts/benchmarks/m2b_recognizer.json").read_text())
+          if reproduced.get("model_contract_sha256") != committed.get("model_contract_sha256"):
+              raise SystemExit("M2B model contract did not reproduce exactly.")
+          reproduced = dict(reproduced)
+          committed = dict(committed)
+          reproduced.pop("model_sha256", None)
+          committed.pop("model_sha256", None)
           if reproduced != committed:
-              raise SystemExit("M2B held-out benchmark did not reproduce exactly.")
+              raise SystemExit("M2B held-out behavior did not reproduce exactly.")
           PY
 
       - name: Set up Node

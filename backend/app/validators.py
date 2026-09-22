@@ -1,4 +1,5 @@
 import math
+from .accounting import check_invoice_total
 from .schemas import WarningItem
 from .utils import GSTIN_PATTERN, _parse_float
 def _build_warnings(document_type: str, fields: dict[str, str], rows: list[dict[str, str]], line_items: list[dict[str, str]] | None = None) -> list[WarningItem]:
@@ -41,16 +42,16 @@ def _build_warnings(document_type: str, fields: dict[str, str], rows: list[dict[
         if not any(fields.get(key) for key in ["taxable_amount", "cgst", "sgst", "igst"]):
             warnings.append(WarningItem(level="warning", field="taxable_amount", message="Taxable amount or tax values are missing."))
 
-        # --- MATH VALIDATION (the key active check) ---
-        taxable = _parse_float(fields.get("taxable_amount", "") or "") or 0.0
-        cgst = _parse_float(fields.get("cgst", "") or "") or 0.0
-        sgst = _parse_float(fields.get("sgst", "") or "") or 0.0
-        igst = _parse_float(fields.get("igst", "") or "") or 0.0
-        total = _parse_float(fields.get("total", "") or "")
-        if total is not None and taxable > 0:
-            expected_total = taxable + cgst + sgst + igst
-            diff = math.fabs(expected_total - total)
-            if diff <= 1.0:
+        # --- MATH VALIDATION (shared with M3A arbitration) ---
+        total_check = check_invoice_total(fields)
+        if total_check.matches is not None:
+            expected_total = float(total_check.expected_total)
+            total = float(total_check.observed_total)
+            if total_check.matches:
+                taxable = _parse_float(fields.get("taxable_amount", "") or "") or 0.0
+                cgst = _parse_float(fields.get("cgst", "") or "") or 0.0
+                sgst = _parse_float(fields.get("sgst", "") or "") or 0.0
+                igst = _parse_float(fields.get("igst", "") or "") or 0.0
                 warnings.append(
                     WarningItem(
                         level="success",
@@ -63,7 +64,7 @@ def _build_warnings(document_type: str, fields: dict[str, str], rows: list[dict[
                     WarningItem(
                         level="warning",
                         field="total",
-                        message=f"Math mismatch: taxable({taxable}) + CGST({cgst}) + SGST({sgst}) + IGST({igst}) = {expected_total}, but total reads {total}. Difference: {diff:.2f}",
+                        message=f"Math mismatch: expected {expected_total}, but total reads {total}. Difference: {float(total_check.difference):.2f}",
                     )
                 )
 

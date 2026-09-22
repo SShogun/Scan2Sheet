@@ -326,3 +326,61 @@ input[type='file']:focus, input[type='text']:focus {
     border: none;
   }
 }
+
+
+.processing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.processing-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 112px;
+  padding: 14px;
+  border: 1px solid var(--accent-secondary);
+  background: var(--surface);
+}
+
+.processing-label {
+  font-family: 'Space Grotesk', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.72rem;
+  color: #555550;
+}
+
+.processing-card strong,
+.processing-card small {
+  overflow-wrap: anywhere;
+}
+
+.experimental-badge {
+  width: fit-content;
+  padding: 4px 8px;
+  border: 1px solid var(--text);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.experimental-selected {
+  background: var(--text);
+  color: var(--surface);
+}
+
+.experimental-error,
+.experimental-abstained {
+  border-color: var(--accent);
+}
+
+@media (max-width: 1024px) {
+  .processing-grid {
+    grid-template-columns: 1fr;
+  }
+}

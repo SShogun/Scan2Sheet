@@ -20,6 +20,7 @@ MODEL_ENV = "SCAN2SHEET_EXPERIMENTAL_MODEL"
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[3] / "artifacts" / "models" / "restricted_hog_nn_v1.npz"
 MAX_GLYPHS = 32
 MIN_TOKEN_CONFIDENCE = 10.0
+MODEL_CONTRACT_SHA256 = "008cce12a1c01014dcc4cbdcabfd34dff1522672c5e767f9f978599dba01114b"
 
 _HOG = cv2.HOGDescriptor((32, 32), (16, 16), (8, 8), (8, 8), 9)
 
@@ -30,10 +31,20 @@ class _RestrictedModel:
     labels: np.ndarray
     distance_thresholds: dict[str, float]
     margin_thresholds: dict[str, float]
-    sha256: str
+    file_sha256: str
+    contract_sha256: str
+    integrity_sha256: str
 
 
-def _abstain(reason: str, *, model_sha256: str = "", confidence: float = 0.0, **extra: Any) -> OCRResult:
+def _abstain(
+    reason: str,
+    *,
+    model_sha256: str = "",
+    model_contract_sha256: str = "",
+    model_integrity_sha256: str = "",
+    confidence: float = 0.0,
+    **extra: Any,
+) -> OCRResult:
     metadata: dict[str, Any] = {
         "abstained": True,
         "reason": reason,
@@ -41,22 +52,75 @@ def _abstain(reason: str, *, model_sha256: str = "", confidence: float = 0.0, **
         "scope": "restricted-token",
         "not_general_purpose_ocr": True,
         "model_sha256": model_sha256,
+        "model_contract_sha256": model_contract_sha256,
+        "model_integrity_sha256": model_integrity_sha256,
     }
     metadata.update(extra)
     return OCRResult(text="", confidence=float(confidence), engine=ENGINE_NAME, metadata=metadata)
 
 
+def restricted_model_integrity_digest(
+    features: np.ndarray,
+    labels: np.ndarray,
+    class_labels: np.ndarray,
+    distances: np.ndarray,
+    margins: np.ndarray,
+) -> str:
+    """Digest exact model arrays for corruption detection within one generated file."""
+    digest = hashlib.sha256()
+    for name, array in (
+        ("features", np.asarray(features, dtype="<f4", order="C")),
+        ("distance_thresholds", np.asarray(distances, dtype="<f4", order="C")),
+        ("margin_thresholds", np.asarray(margins, dtype="<f4", order="C")),
+    ):
+        digest.update(name.encode("ascii") + b"\0")
+        digest.update(str(array.shape).encode("ascii") + b"\0")
+        digest.update(array.tobytes(order="C"))
+
+    for name, array in (("labels", labels), ("class_labels", class_labels)):
+        values = [str(value) for value in np.asarray(array).tolist()]
+        digest.update(name.encode("ascii") + b"\0")
+        digest.update(str(np.asarray(array).shape).encode("ascii") + b"\0")
+        digest.update("\n".join(values).encode("utf-8"))
+    return digest.hexdigest()
+
+
+def restricted_model_contract_for_path(model_path: str | Path) -> str:
+    with np.load(Path(model_path), allow_pickle=False) as data:
+        features = np.asarray(data["features"], dtype=np.float32)
+        labels = np.asarray(data["labels"]).astype("<U1")
+        class_labels = np.asarray(data["class_labels"]).astype("<U1")
+        distances = np.asarray(data["distance_thresholds"], dtype=np.float32)
+        margins = np.asarray(data["margin_thresholds"], dtype=np.float32)
+        stored_contract = str(np.asarray(data["model_contract_sha256"]).item())
+        stored_integrity = str(np.asarray(data["model_integrity_sha256"]).item())
+
+    if stored_contract != MODEL_CONTRACT_SHA256:
+        raise ValueError(f"Model contract mismatch: {stored_contract} != {MODEL_CONTRACT_SHA256}")
+    actual_integrity = restricted_model_integrity_digest(features, labels, class_labels, distances, margins)
+    if actual_integrity != stored_integrity:
+        raise ValueError(f"Model integrity mismatch: {actual_integrity} != {stored_integrity}")
+    return stored_contract
+
+
 @lru_cache(maxsize=4)
 def _load_model(model_path: str) -> _RestrictedModel:
     path = Path(model_path)
-    payload = path.read_bytes()
-    digest = hashlib.sha256(payload).hexdigest()
+    file_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
     with np.load(path, allow_pickle=False) as data:
         features = np.asarray(data["features"], dtype=np.float32)
         labels = np.asarray(data["labels"]).astype("<U1")
         class_labels = np.asarray(data["class_labels"]).astype("<U1")
         distances = np.asarray(data["distance_thresholds"], dtype=np.float32)
         margins = np.asarray(data["margin_thresholds"], dtype=np.float32)
+        stored_contract = str(np.asarray(data["model_contract_sha256"]).item()) if "model_contract_sha256" in data.files else ""
+        stored_integrity = str(np.asarray(data["model_integrity_sha256"]).item()) if "model_integrity_sha256" in data.files else ""
+    if stored_contract != MODEL_CONTRACT_SHA256:
+        raise ValueError("Restricted recognizer model contract mismatch.")
+    actual_integrity = restricted_model_integrity_digest(features, labels, class_labels, distances, margins)
+    if actual_integrity != stored_integrity:
+        raise ValueError("Restricted recognizer model integrity mismatch.")
+    digest = stored_contract
 
     if features.ndim != 2 or len(features) != len(labels):
         raise ValueError("Invalid restricted recognizer model shape.")
@@ -72,7 +136,9 @@ def _load_model(model_path: str) -> _RestrictedModel:
         labels=labels,
         distance_thresholds={str(label): float(value) for label, value in zip(class_labels, distances, strict=True)},
         margin_thresholds={str(label): float(value) for label, value in zip(class_labels, margins, strict=True)},
-        sha256=digest,
+        file_sha256=file_sha256,
+        contract_sha256=stored_contract,
+        integrity_sha256=stored_integrity,
     )
 
 
@@ -190,7 +256,7 @@ class RestrictedExperimentalEngine:
 
         glyphs = _segment_glyphs(image)
         if not glyphs or len(glyphs) > MAX_GLYPHS:
-            return _abstain("segmentation", model_sha256=model.sha256, glyph_count=len(glyphs))
+            return _abstain("segmentation", model_sha256=model.file_sha256, model_contract_sha256=model.contract_sha256, model_integrity_sha256=model.integrity_sha256, glyph_count=len(glyphs))
 
         output: list[str] = []
         confidences: list[float] = []
@@ -201,7 +267,7 @@ class RestrictedExperimentalEngine:
             if distance > distance_threshold or margin < margin_threshold:
                 return _abstain(
                     "unknown_or_uncertain",
-                    model_sha256=model.sha256,
+                    model_sha256=model.file_sha256, model_contract_sha256=model.contract_sha256, model_integrity_sha256=model.integrity_sha256,
                     predicted_label=label,
                     distance=round(distance, 6),
                     margin=round(margin, 6),
@@ -217,7 +283,7 @@ class RestrictedExperimentalEngine:
         if token_confidence < self.min_token_confidence:
             return _abstain(
                 "low_confidence",
-                model_sha256=model.sha256,
+                model_sha256=model.file_sha256, model_contract_sha256=model.contract_sha256, model_integrity_sha256=model.integrity_sha256,
                 confidence=token_confidence,
                 glyph_count=len(glyphs),
             )
@@ -230,7 +296,9 @@ class RestrictedExperimentalEngine:
                 "experimental": True,
                 "scope": "restricted-token",
                 "not_general_purpose_ocr": True,
-                "model_sha256": model.sha256,
+                "model_sha256": model.file_sha256,
+                "model_contract_sha256": model.contract_sha256,
+                "model_integrity_sha256": model.integrity_sha256,
                 "glyph_count": len(glyphs),
                 "vocabulary": RESTRICTED_VOCABULARY,
             },

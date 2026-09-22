@@ -5,9 +5,10 @@ import json
 from pathlib import Path
 
 import pytest
+import numpy as np
 from PIL import Image
 
-from backend.app.ocr.experimental import RestrictedExperimentalEngine
+from backend.app.ocr.experimental import RestrictedExperimentalEngine, restricted_model_contract_for_path
 from backend.app.ocr.router import OCRRouter
 from backend.app.ocr.types import OCRResult
 from tools.evaluate_restricted_recognizer import evaluate
@@ -18,6 +19,9 @@ from tools.train_restricted_recognizer import train
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_MODEL_HASH = (
     ROOT / "experiments/m2b-hog-nn-v1/model_hash.txt"
+).read_text(encoding="utf-8").strip()
+EXPECTED_MODEL_CONTRACT = (
+    ROOT / "experiments/m2b-hog-nn-v1/model_contract_hash.txt"
 ).read_text(encoding="utf-8").strip()
 
 
@@ -31,7 +35,7 @@ def reproduced_model(tmp_path_factory: pytest.TempPathFactory) -> Path:
         model,
         work / "experiment",
     )
-    assert actual == EXPECTED_MODEL_HASH
+    assert actual == EXPECTED_MODEL_CONTRACT
     return model
 
 
@@ -168,7 +172,9 @@ def test_red_24_experimental_result_has_explicit_provenance(
     assert result.metadata["experimental"] is True
     assert result.metadata["scope"] == "restricted-token"
     assert result.metadata["not_general_purpose_ocr"] is True
-    assert result.metadata["model_sha256"] == EXPECTED_MODEL_HASH
+    assert len(result.metadata["model_sha256"]) == 64
+    assert result.metadata["model_contract_sha256"] == EXPECTED_MODEL_CONTRACT
+    assert len(result.metadata["model_integrity_sha256"]) == 64
 
 
 def test_red_25_experimental_failure_cannot_break_primary_ocr() -> None:
@@ -191,16 +197,19 @@ def test_red_25_experimental_failure_cannot_break_primary_ocr() -> None:
     assert result.metadata["secondary_error"] == "RuntimeError"
 
 
-def test_model_hash_matches_frozen_test_manifest(
+def test_model_contract_matches_frozen_test_manifest(
     reproduced_model: Path,
 ) -> None:
-    actual = hashlib.sha256(reproduced_model.read_bytes()).hexdigest()
+    actual_contract = restricted_model_contract_for_path(reproduced_model)
+    actual_file_sha256 = hashlib.sha256(reproduced_model.read_bytes()).hexdigest()
     test_manifest = load_manifest(
         ROOT / "data/recognizer/test/manifest.json"
     )
 
-    assert actual == EXPECTED_MODEL_HASH
+    assert actual_contract == EXPECTED_MODEL_CONTRACT
+    assert len(actual_file_sha256) == 64
     assert test_manifest["frozen_model_sha256"] == EXPECTED_MODEL_HASH
+    assert test_manifest["frozen_model_contract_sha256"] == EXPECTED_MODEL_CONTRACT
 
 
 def test_trainer_does_not_read_heldout_test_manifest() -> None:
@@ -234,6 +243,7 @@ def test_heldout_report_records_safe_abstention_without_claiming_superiority() -
     assert report["experimental_unknown_abstention_rate"] == 1.0
     assert report["experimental_known_exact_accuracy"] > 0.0
     assert report["model_sha256"] == EXPECTED_MODEL_HASH
+    assert report["model_contract_sha256"] == EXPECTED_MODEL_CONTRACT
 
 
 def test_evaluator_rejects_model_hash_mismatch(
@@ -241,9 +251,12 @@ def test_evaluator_rejects_model_hash_mismatch(
     tmp_path: Path,
 ) -> None:
     mutated = tmp_path / "mutated-model.npz"
-    mutated.write_bytes(reproduced_model.read_bytes() + b"x")
+    with np.load(reproduced_model, allow_pickle=False) as data:
+        payload = {key: np.asarray(data[key]).copy() for key in data.files}
+    payload["features"][0, 0] += 0.1
+    np.savez_compressed(mutated, **payload)
 
-    with pytest.raises(RuntimeError, match="Model hash mismatch"):
+    with pytest.raises(RuntimeError, match="Model integrity mismatch"):
         evaluate(
             mutated,
             ROOT / "data/recognizer/train/manifest.json",

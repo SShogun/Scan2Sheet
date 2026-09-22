@@ -23,6 +23,42 @@ type InvoiceLineItem = {
   amount: string;
 };
 
+type ImageQualityInfo = {
+  status: 'good' | 'degraded';
+  blurred: boolean;
+  low_contrast: boolean;
+  noisy: boolean;
+  orientation_degrees: number;
+  estimated_skew_degrees: number;
+  warnings: string[];
+};
+
+type ArbitrationInfo = {
+  field: string;
+  selected_engine: string;
+  reason: string;
+  primary_value: string;
+  primary_confidence: number;
+  secondary_value: string;
+  secondary_confidence: number;
+};
+
+type ProcessingInfo = {
+  image_quality: ImageQualityInfo | null;
+  preprocessing_applied: string[];
+  experimental_ocr_status:
+    | 'disabled'
+    | 'not_applicable'
+    | 'not_run'
+    | 'no_candidate_crop'
+    | 'abstained'
+    | 'candidate'
+    | 'selected'
+    | 'error';
+  experimental_ocr_engine: string;
+  arbitration: ArbitrationInfo | null;
+};
+
 type ExtractResponse = {
   document_type: 'invoice' | 'ledger' | 'unknown';
   raw_text: string;
@@ -33,6 +69,7 @@ type ExtractResponse = {
   confidence: {
     overall: number;
   };
+  processing?: ProcessingInfo;
 };
 
 const API_BASE = 'http://127.0.0.1:8000';
@@ -318,6 +355,46 @@ export default function App() {
           </div>
           
           <div className="metric">Confidence: {(response.confidence.overall * 100).toFixed(2)}%</div>
+
+          <h3>OCR Processing</h3>
+          <div className="processing-grid">
+            <div className="processing-card">
+              <span className="processing-label">Image quality</span>
+              <strong>
+                {response.processing?.image_quality
+                  ? response.processing.image_quality.status
+                  : 'not available'}
+              </strong>
+              {!response.processing?.image_quality ? (
+                <small>Quality analysis not available.</small>
+              ) : response.processing.image_quality.warnings.length ? (
+                <small>{response.processing.image_quality.warnings.join(', ')}</small>
+              ) : (
+                <small>No quality warnings.</small>
+              )}
+            </div>
+            <div className="processing-card">
+              <span className="processing-label">Preprocessing applied</span>
+              <strong>
+                {response.processing?.preprocessing_applied.length
+                  ? response.processing.preprocessing_applied.join(' → ')
+                  : 'none'}
+              </strong>
+            </div>
+            <div className="processing-card">
+              <span className="processing-label">Experimental OCR</span>
+              <span className={`experimental-badge experimental-${response.processing?.experimental_ocr_status ?? 'not_applicable'}`}>
+                {(response.processing?.experimental_ocr_status ?? 'not_applicable').replaceAll('_', ' ')}
+              </span>
+              {response.processing?.arbitration ? (
+                <small>
+                  Total selected from {response.processing.arbitration.selected_engine}: {response.processing.arbitration.reason}
+                </small>
+              ) : (
+                <small>No field arbitration applied.</small>
+              )}
+            </div>
+          </div>
 
           <h3>Validation</h3>
           {response.warnings.length ? (

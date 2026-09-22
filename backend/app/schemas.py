@@ -18,6 +18,43 @@ class Confidence(BaseModel):
     overall: float = 0.0
 
 
+class ImageQualityInfo(BaseModel):
+    status: Literal["good", "degraded"] = "good"
+    blurred: bool = False
+    low_contrast: bool = False
+    noisy: bool = False
+    orientation_degrees: int = 0
+    estimated_skew_degrees: float = 0.0
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ArbitrationInfo(BaseModel):
+    field: str = ""
+    selected_engine: str = ""
+    reason: str = ""
+    primary_value: str = ""
+    primary_confidence: float = 0.0
+    secondary_value: str = ""
+    secondary_confidence: float = 0.0
+
+
+class ProcessingInfo(BaseModel):
+    image_quality: ImageQualityInfo | None = None
+    preprocessing_applied: list[str] = Field(default_factory=list)
+    experimental_ocr_status: Literal[
+        "disabled",
+        "not_applicable",
+        "not_run",
+        "no_candidate_crop",
+        "abstained",
+        "candidate",
+        "selected",
+        "error",
+    ] = "not_applicable"
+    experimental_ocr_engine: str = ""
+    arbitration: ArbitrationInfo | None = None
+
+
 class ExtractedRow(BaseModel):
     date: str = ""
     description: str = ""
@@ -106,3 +143,4 @@ class ExtractResponse(BaseModel):
     line_items: list[InvoiceLineItem] = Field(default_factory=list)
     warnings: list[WarningItem] = Field(default_factory=list)
     confidence: Confidence = Field(default_factory=Confidence)
+    processing: ProcessingInfo = Field(default_factory=ProcessingInfo)

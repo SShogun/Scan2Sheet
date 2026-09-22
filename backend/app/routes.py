@@ -3,13 +3,119 @@ import io
 import uuid
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException
 from fastapi.responses import StreamingResponse
-from .schemas import ExtractResponse, Template, InvoiceLineItem
+from .schemas import (
+    ArbitrationInfo,
+    ExtractResponse,
+    ImageQualityInfo,
+    InvoiceLineItem,
+    ProcessingInfo,
+    Template,
+)
 from .store import templates_db
-from .ocr import _decode_image, _preprocess_image, _ocr_image
+from .ocr import (
+    _decode_image,
+    _experimental_engine_available,
+    _experimental_result,
+    _ocr_data,
+    _primary_ocr_result,
+    _preprocess_result,
+)
 from .extractors import _classify_document, _extract_invoice_fields, _extract_invoice_line_items, _extract_ledger_rows, _process_with_template
+from .arbitration import FieldCandidate, arbitrate_invoice_total, find_amount_candidate_crop
 from .validators import _build_warnings, _compute_confidence
 
 router = APIRouter()
+
+M3A_SECONDARY_TRIGGER_CONFIDENCE = 60.0
+
+
+def _processing_info(preprocess_result) -> ProcessingInfo:
+    quality = preprocess_result.quality_profile
+    return ProcessingInfo(
+        image_quality=ImageQualityInfo(
+            status="degraded" if quality.warnings else "good",
+            blurred=quality.is_blurred,
+            low_contrast=quality.is_low_contrast,
+            noisy=quality.is_noisy,
+            orientation_degrees=quality.orientation_degrees,
+            estimated_skew_degrees=quality.estimated_skew_degrees,
+            warnings=list(quality.warnings),
+        ),
+        preprocessing_applied=list(preprocess_result.transforms_applied),
+        experimental_ocr_status=(
+            "not_run" if _experimental_engine_available() else "disabled"
+        ),
+    )
+
+
+def _arbitrate_invoice_total_from_crop(
+    processed_image,
+    fields: dict[str, str],
+    processing: ProcessingInfo,
+    *,
+    primary_engine: str,
+) -> None:
+    primary_total = fields.get("total", "")
+    if not primary_total:
+        return
+    if not _experimental_engine_available():
+        processing.experimental_ocr_status = "disabled"
+        return
+
+    crop = find_amount_candidate_crop(
+        processed_image,
+        _ocr_data(processed_image),
+        primary_total,
+    )
+    if crop is None:
+        processing.experimental_ocr_status = "no_candidate_crop"
+        return
+    if crop.confidence >= M3A_SECONDARY_TRIGGER_CONFIDENCE:
+        processing.experimental_ocr_status = "not_run"
+        return
+
+    secondary_result = _experimental_result(crop.image)
+    if secondary_result is None:
+        processing.experimental_ocr_status = "disabled"
+        return
+
+    processing.experimental_ocr_engine = secondary_result.engine
+    if secondary_result.abstained:
+        reason = str(secondary_result.metadata.get("reason", ""))
+        processing.experimental_ocr_status = (
+            "error" if reason.startswith("error:") else "abstained"
+        )
+        return
+
+    primary = FieldCandidate(
+        value=primary_total,
+        engine=primary_engine,
+        confidence=crop.confidence,
+        metadata={"box": crop.box},
+    )
+    secondary = FieldCandidate(
+        value=secondary_result.text,
+        engine=secondary_result.engine,
+        confidence=secondary_result.confidence,
+        metadata=dict(secondary_result.metadata),
+    )
+    decision = arbitrate_invoice_total(fields, primary, secondary)
+    fields["total"] = decision.value
+    processing.experimental_ocr_status = (
+        "selected"
+        if decision.selected_engine == secondary.engine
+        else "candidate"
+    )
+    processing.arbitration = ArbitrationInfo(
+        field="total",
+        selected_engine=decision.selected_engine,
+        reason=decision.reason,
+        primary_value=primary.value,
+        primary_confidence=primary.confidence,
+        secondary_value=secondary.value,
+        secondary_confidence=secondary.confidence,
+    )
+
 
 @router.post("/api/templates", response_model=Template)
 def create_template(template: Template) -> Template:
@@ -41,6 +147,7 @@ async def extract_document(
     filename = (file.filename or "").lower()
     content_type = (file.content_type or "").lower()
     ocr_confidence = 100.0
+    processing = ProcessingInfo()
 
     is_pdf = filename.endswith(".pdf") or "pdf" in content_type
     is_spreadsheet = filename.endswith((".csv", ".xls", ".xlsx")) or content_type in (
@@ -64,6 +171,8 @@ async def extract_document(
 
         # If the PDF is a scanned image (no selectable text), fall back to OCR
         stripped = raw_text.strip()
+        pdf_processed_image = None
+        pdf_primary_engine = ""
         if len(stripped) < 20:
             try:
                 doc = pymupdf.open(stream=file_bytes, filetype="pdf")
@@ -72,8 +181,14 @@ async def extract_document(
                 img_bytes = pix.tobytes("png")
                 doc.close()
                 image = _decode_image(img_bytes)
-                preprocessed_image = _preprocess_image(image)
-                raw_text, ocr_confidence = _ocr_image(preprocessed_image)
+                preprocess_result = _preprocess_result(image)
+                processing = _processing_info(preprocess_result)
+                preprocessed_image = preprocess_result.processed_image
+                primary_result = _primary_ocr_result(preprocessed_image)
+                raw_text = primary_result.text
+                ocr_confidence = primary_result.confidence
+                pdf_processed_image = preprocessed_image
+                pdf_primary_engine = primary_result.engine
             except Exception as e:
                 traceback.print_exc()
                 raise HTTPException(status_code=500, detail=f"PDF OCR fallback failed: {repr(e)}")
@@ -85,6 +200,13 @@ async def extract_document(
         if document_type == "invoice":
             fields = _extract_invoice_fields(raw_text)
             line_items = _extract_invoice_line_items(raw_text)
+            if pdf_processed_image is not None:
+                _arbitrate_invoice_total_from_crop(
+                    pdf_processed_image,
+                    fields,
+                    processing,
+                    primary_engine=pdf_primary_engine,
+                )
         elif document_type == "ledger":
             rows = _extract_ledger_rows(raw_text)
 
@@ -119,8 +241,12 @@ async def extract_document(
             document_type = template.doc_type
             line_items = []
         else:
-            preprocessed_image = _preprocess_image(image)
-            raw_text, ocr_confidence = _ocr_image(preprocessed_image)
+            preprocess_result = _preprocess_result(image)
+            processing = _processing_info(preprocess_result)
+            preprocessed_image = preprocess_result.processed_image
+            primary_result = _primary_ocr_result(preprocessed_image)
+            raw_text = primary_result.text
+            ocr_confidence = primary_result.confidence
             document_type = _classify_document(raw_text)
             
             fields: dict[str, str] = {}
@@ -129,6 +255,12 @@ async def extract_document(
             if document_type == "invoice":
                 fields = _extract_invoice_fields(raw_text)
                 line_items = _extract_invoice_line_items(raw_text)
+                _arbitrate_invoice_total_from_crop(
+                    preprocessed_image,
+                    fields,
+                    processing,
+                    primary_engine=primary_result.engine,
+                )
             elif document_type == "ledger":
                 rows = _extract_ledger_rows(raw_text)
 
@@ -150,9 +282,6 @@ async def extract_document(
     raw_text = formatted_table + raw_text
 
     warnings = _build_warnings(document_type, fields, rows, line_items)
-
-
-    warnings = _build_warnings(document_type, fields, rows, line_items)
     confidence_overall = _compute_confidence(ocr_confidence, fields, rows)
 
     # Convert line_items dicts into InvoiceLineItem models
@@ -166,6 +295,7 @@ async def extract_document(
         line_items=line_item_models,
         warnings=warnings,
         confidence={"overall": confidence_overall},
+        processing=processing,
     )
 
 @router.post("/api/export/csv")
