@@ -8,7 +8,7 @@ from PIL import Image
 
 from .deskew import deskew
 from .enhance import adaptive_threshold, denoise, enhance_contrast, resize_for_ocr
-from .orientation import detect_orientation_degrees, normalize_orientation
+from .orientation import bounded_analysis, detect_orientation_degrees, normalize_orientation
 from .quality import QualityProfile, analyze_quality
 
 
@@ -31,6 +31,93 @@ def _canonical_grayscale(image: Image.Image) -> np.ndarray:
     return cv2.cvtColor(np.asarray(rgb), cv2.COLOR_RGB2GRAY)
 
 
+_PAGE_QUAD_MIN_AREA_RATIO = 0.35
+
+
+def _detect_page_quadrilateral(gray: np.ndarray) -> np.ndarray | None:
+    """Find a large page-like quadrilateral on a bounded analysis image."""
+    analysis = bounded_analysis(gray)
+    blurred = cv2.GaussianBlur(analysis, (5, 5), 0)
+    edges = cv2.Canny(blurred, 30, 100)
+    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    analysis_area = float(analysis.shape[0] * analysis.shape[1])
+
+    for contour in sorted(contours, key=cv2.contourArea, reverse=True):
+        area_ratio = cv2.contourArea(contour) / analysis_area
+        if area_ratio < _PAGE_QUAD_MIN_AREA_RATIO:
+            break
+        perimeter = cv2.arcLength(contour, True)
+        approximation = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
+        if len(approximation) != 4 or not cv2.isContourConvex(approximation):
+            continue
+
+        points = approximation.reshape(4, 2).astype(np.float32)
+        scale = np.array(
+            [
+                gray.shape[1] / analysis.shape[1],
+                gray.shape[0] / analysis.shape[0],
+            ],
+            dtype=np.float32,
+        )
+        return points * scale
+    return None
+
+
+def _order_quadrilateral(points: np.ndarray) -> np.ndarray:
+    ordered = np.empty((4, 2), dtype=np.float32)
+    sums = points.sum(axis=1)
+    differences = np.diff(points, axis=1).reshape(-1)
+    ordered[0] = points[np.argmin(sums)]
+    ordered[1] = points[np.argmin(differences)]
+    ordered[2] = points[np.argmax(sums)]
+    ordered[3] = points[np.argmax(differences)]
+    return ordered
+
+
+def _rectify_page(gray: np.ndarray, points: np.ndarray) -> np.ndarray:
+    top_left, top_right, bottom_right, bottom_left = _order_quadrilateral(points)
+    width = int(
+        round(
+            max(
+                np.hypot(*(top_right - top_left)),
+                np.hypot(*(bottom_right - bottom_left)),
+            )
+        )
+    )
+    height = int(
+        round(
+            max(
+                np.hypot(*(bottom_left - top_left)),
+                np.hypot(*(bottom_right - top_right)),
+            )
+        )
+    )
+    if width < 2 or height < 2:
+        return gray
+
+    destination = np.array(
+        [
+            [0, 0],
+            [width - 1, 0],
+            [width - 1, height - 1],
+            [0, height - 1],
+        ],
+        dtype=np.float32,
+    )
+    matrix = cv2.getPerspectiveTransform(
+        np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32),
+        destination,
+    )
+    return cv2.warpPerspective(
+        gray,
+        matrix,
+        (width, height),
+        flags=cv2.INTER_CUBIC,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=255,
+    )
+
+
 def preprocess_image(image: Image.Image) -> PreprocessResult:
     original_size = tuple(int(value) for value in image.size)
     gray = _canonical_grayscale(image)
@@ -41,6 +128,14 @@ def preprocess_image(image: Image.Image) -> PreprocessResult:
     gray, rotation = normalize_orientation(gray, orientation)
     if rotation:
         transforms.append(f"orientation:{rotation}")
+
+    if quality.is_unevenly_illuminated:
+        page_quadrilateral = _detect_page_quadrilateral(gray)
+        if page_quadrilateral is not None:
+            gray = _rectify_page(gray, page_quadrilateral)
+            transforms.append("perspective:page_quad")
+        gray = enhance_contrast(gray)
+        transforms.append("illumination:clahe")
 
     gray, skew_angle = deskew(gray)
     if skew_angle:
@@ -63,8 +158,9 @@ def preprocess_image(image: Image.Image) -> PreprocessResult:
         transforms.append("denoise:median3")
 
     if quality.is_low_contrast:
-        gray = enhance_contrast(gray)
-        transforms.append("contrast:clahe")
+        if not quality.is_unevenly_illuminated:
+            gray = enhance_contrast(gray)
+            transforms.append("contrast:clahe")
         gray = adaptive_threshold(gray)
         transforms.append("threshold:adaptive_gaussian")
 
