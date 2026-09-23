@@ -6,7 +6,7 @@
         "expected_abstain": false,
         "experimental": {
           "abstained": false,
-          "confidence": 32.5648,
+          "confidence": 18.411,
           "reason": "",
           "text": "98,765.43"
         },
@@ -118,7 +118,7 @@
         "expected_abstain": false,
         "experimental": {
           "abstained": false,
-          "confidence": 63.3778,
+          "confidence": 74.227,
           "reason": "",
           "text": "INV-1I0O"
         },
