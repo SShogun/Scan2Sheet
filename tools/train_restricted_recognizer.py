@@ -161,7 +161,7 @@ def train(train_manifest_path: Path, validation_manifest_path: Path, output_mode
             "labels": label_array,
             "class_labels": class_labels,
             "distance_thresholds": np.asarray([distance_thresholds[label] for label in class_labels], dtype="<f4"),
-            "margin_thresholds": np.asarray([margin_thresholds[label] for label in class_labels], dtype=np.float32),
+            "margin_thresholds": np.asarray([margin_thresholds[label] for label in class_labels], dtype="<f4"),
         },
     )
     digest = hashlib.sha256(output_model.read_bytes()).hexdigest()
