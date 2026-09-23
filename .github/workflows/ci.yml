@@ -75,3 +75,114 @@ jobs:
           npm ci
           npm audit --audit-level=high
           npm run build
+
+      - name: Live demo smoke
+        run: |
+          set -euo pipefail
+
+          python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 > /tmp/scan2sheet-api.log 2>&1 &
+          API_PID=$!
+          (
+            cd frontend
+            npm run preview -- --host 127.0.0.1 --port 5173
+          ) > /tmp/scan2sheet-frontend.log 2>&1 &
+          FRONTEND_PID=$!
+
+          cleanup() {
+            kill "$API_PID" "$FRONTEND_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          READY=0
+          for _ in {1..30}; do
+            if curl -fsS http://127.0.0.1:8000/api/health > /dev/null \
+              && curl -fsS http://127.0.0.1:5173/ > /dev/null; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$READY" -ne 1 ]; then
+            cat /tmp/scan2sheet-api.log
+            cat /tmp/scan2sheet-frontend.log
+            exit 1
+          fi
+
+          curl -fsS \
+            -D /tmp/health.headers \
+            -o /tmp/health.json \
+            -H "Origin: http://127.0.0.1:5173" \
+            http://127.0.0.1:8000/api/health
+          grep -qi '^access-control-allow-origin: http://127.0.0.1:5173' /tmp/health.headers
+          curl -fsS http://127.0.0.1:5173/ | grep -q 'id="root"'
+
+          if ! curl -fsS \
+            -F "file=@data/samples/invoice/demo-invoice.png;type=image/png" \
+            http://127.0.0.1:8000/api/extract \
+            -o /tmp/invoice.json; then
+            cat /tmp/scan2sheet-api.log
+            exit 1
+          fi
+
+          if ! curl -fsS \
+            -F "file=@data/samples/ledger/demo-ledger.png;type=image/png" \
+            http://127.0.0.1:8000/api/extract \
+            -o /tmp/ledger.json; then
+            cat /tmp/scan2sheet-api.log
+            exit 1
+          fi
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          health = json.loads(Path("/tmp/health.json").read_text())
+          invoice = json.loads(Path("/tmp/invoice.json").read_text())
+          ledger = json.loads(Path("/tmp/ledger.json").read_text())
+
+          assert health == {
+              "status": "ok",
+              "service": "scan2sheet-local-api",
+          }
+          assert invoice["document_type"] == "invoice", invoice
+          assert invoice["fields"], invoice
+          assert invoice["raw_text"].strip(), invoice
+          assert ledger["document_type"] == "ledger", ledger
+          assert ledger["rows"], ledger
+          assert ledger["raw_text"].strip(), ledger
+
+          print(
+              "live extraction:",
+              f"invoice_fields={len(invoice['fields'])}",
+              f"invoice_items={len(invoice['line_items'])}",
+              f"ledger_rows={len(ledger['rows'])}",
+          )
+          PY
+
+          curl -fsS \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/invoice.json \
+            http://127.0.0.1:8000/api/export/csv \
+            -o /tmp/invoice.csv
+          curl -fsS \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/ledger.json \
+            http://127.0.0.1:8000/api/export/csv \
+            -o /tmp/ledger.csv
+
+          python - <<'PY'
+          from pathlib import Path
+
+          invoice_csv = Path("/tmp/invoice.csv").read_text()
+          ledger_csv = Path("/tmp/ledger.csv").read_text()
+
+          assert invoice_csv.startswith("field,value"), invoice_csv
+          assert "invoice_number" in invoice_csv, invoice_csv
+          assert ledger_csv.startswith("date,description,debit,credit,balance"), ledger_csv
+
+          print(
+              "live exports:",
+              f"invoice_csv_bytes={len(invoice_csv.encode())}",
+              f"ledger_csv_bytes={len(ledger_csv.encode())}",
+          )
+          PY
