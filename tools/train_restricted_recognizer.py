@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 from pathlib import Path
 import sys
+import zipfile
 
 import numpy as np
 
@@ -14,6 +16,16 @@ if str(ROOT) not in sys.path:
 
 from backend.app.ocr.experimental import MIN_TOKEN_CONFIDENCE, RESTRICTED_VOCABULARY, RestrictedExperimentalEngine, _feature_vector, _segment_glyphs
 from tools.recognizer_dataset import load_manifest, render_sample, verify_manifest
+
+
+MODEL_ARCHIVE_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
+MODEL_MEMBER_ORDER = (
+    "features",
+    "labels",
+    "class_labels",
+    "distance_thresholds",
+    "margin_thresholds",
+)
 
 
 def _classify(glyph, features: np.ndarray, labels: np.ndarray) -> tuple[str, float, float]:
@@ -27,6 +39,29 @@ def _classify(glyph, features: np.ndarray, labels: np.ndarray) -> tuple[str, flo
 def _write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _npy_bytes(array: np.ndarray) -> bytes:
+    buffer = io.BytesIO()
+    np.save(buffer, np.ascontiguousarray(array), allow_pickle=False)
+    return buffer.getvalue()
+
+
+def _write_deterministic_model(output_model: Path, arrays: dict[str, np.ndarray]) -> None:
+    missing = set(MODEL_MEMBER_ORDER) - arrays.keys()
+    extra = arrays.keys() - set(MODEL_MEMBER_ORDER)
+    if missing or extra:
+        raise ValueError(f"Unexpected model arrays: missing={sorted(missing)}, extra={sorted(extra)}")
+
+    output_model.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(output_model, mode="w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
+        for name in MODEL_MEMBER_ORDER:
+            info = zipfile.ZipInfo(f"{name}.npy", date_time=MODEL_ARCHIVE_TIMESTAMP)
+            info.compress_type = zipfile.ZIP_STORED
+            info.create_system = 3
+            info.external_attr = 0o600 << 16
+            info.flag_bits = 0
+            archive.writestr(info, _npy_bytes(arrays[name]))
 
 
 def train(train_manifest_path: Path, validation_manifest_path: Path, output_model: Path, experiment_dir: Path | None = None) -> str:
@@ -87,8 +122,16 @@ def train(train_manifest_path: Path, validation_manifest_path: Path, output_mode
         margin_thresholds[character] = float(margin_threshold)
 
     class_labels = np.asarray(sorted(RESTRICTED_VOCABULARY), dtype="<U1")
-    output_model.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(output_model, features=matrix, labels=label_array, class_labels=class_labels, distance_thresholds=np.asarray([distance_thresholds[label] for label in class_labels], dtype=np.float32), margin_thresholds=np.asarray([margin_thresholds[label] for label in class_labels], dtype=np.float32))
+    _write_deterministic_model(
+        output_model,
+        {
+            "features": matrix,
+            "labels": label_array,
+            "class_labels": class_labels,
+            "distance_thresholds": np.asarray([distance_thresholds[label] for label in class_labels], dtype=np.float32),
+            "margin_thresholds": np.asarray([margin_thresholds[label] for label in class_labels], dtype=np.float32),
+        },
+    )
     digest = hashlib.sha256(output_model.read_bytes()).hexdigest()
 
     engine = RestrictedExperimentalEngine(output_model); known_total = known_correct = unknown_total = unknown_safe = 0; details = []
