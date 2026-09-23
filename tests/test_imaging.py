@@ -15,7 +15,21 @@ def test_noisy_input_uses_median_denoise():
 def test_low_contrast_input_uses_clahe_and_adaptive_threshold():
     r=preprocess_image(_load('low_contrast')); assert r.quality_profile.is_low_contrast and 'contrast:clahe' in r.transforms_applied and 'threshold:adaptive_gaussian' in r.transforms_applied
 def test_clean_input_avoids_damage_prone_enhancements():
-    r=preprocess_image(_load('clean')); assert not r.quality_profile.is_blurred and not r.quality_profile.is_low_contrast and not r.quality_profile.is_noisy; assert 'denoise:median3' not in r.transforms_applied and 'contrast:clahe' not in r.transforms_applied and 'threshold:adaptive_gaussian' not in r.transforms_applied
+    r=preprocess_image(_load('clean')); assert not r.quality_profile.is_blurred and not r.quality_profile.is_low_contrast and not r.quality_profile.is_noisy and not r.quality_profile.is_unevenly_illuminated; assert 'denoise:median3' not in r.transforms_applied and 'contrast:clahe' not in r.transforms_applied and 'threshold:adaptive_gaussian' not in r.transforms_applied and 'illumination:clahe' not in r.transforms_applied and 'perspective:page_quad' not in r.transforms_applied
+
+def test_phone_photo_normalizes_perspective_and_illumination():
+    r=preprocess_image(_load('phone_photo'))
+    assert r.quality_profile.is_unevenly_illuminated
+    assert 'uneven_illumination' in r.quality_profile.warnings
+    assert 'perspective:page_quad' in r.transforms_applied
+    assert 'illumination:clahe' in r.transforms_applied
+    assert not any(item.startswith('deskew:') for item in r.transforms_applied)
+
+def test_phone_photo_preprocessing_is_deterministic():
+    image=_load('phone_photo'); a=preprocess_image(image); b=preprocess_image(image)
+    assert np.array_equal(np.asarray(a.processed_image),np.asarray(b.processed_image))
+    assert a.quality_profile==b.quality_profile and a.transforms_applied==b.transforms_applied
+
 def test_processed_pixels_are_deterministic():
     image=_load('clean'); a=preprocess_image(image); b=preprocess_image(image); assert np.array_equal(np.asarray(a.processed_image),np.asarray(b.processed_image)); assert a.quality_profile==b.quality_profile and a.transforms_applied==b.transforms_applied
 def test_clean_white_background_is_not_treated_as_impulse_noise():

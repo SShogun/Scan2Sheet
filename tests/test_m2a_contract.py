@@ -159,7 +159,11 @@ def test_2a_10_extract_endpoint_contract_stays_compatible() -> None:
     assert "template_id: str | None = Form(None)" in source
 
 
-def test_2a_11_m1b_ocr_results_remain_stable(current_benchmark) -> None:
+def test_2a_11_m1b_ocr_results_remain_stable(
+    current_benchmark, fixture_manifest
+) -> None:
+    from tests.ocr_benchmark import normalize_text
+
     expected = json.loads(
         (ROOT / "artifacts" / "benchmarks" / "m1b_after.json").read_text()
     )
@@ -168,6 +172,8 @@ def test_2a_11_m1b_ocr_results_remain_stable(current_benchmark) -> None:
 
     assert set(before) == set(after)
     for category in before:
+        if category == "phone_photo":
+            continue
         assert after[category]["normalized_ocr_text"] == before[category][
             "normalized_ocr_text"
         ]
@@ -176,3 +182,15 @@ def test_2a_11_m1b_ocr_results_remain_stable(current_benchmark) -> None:
         assert after[category]["important_field_accuracy"] == before[category][
             "important_field_accuracy"
         ]
+
+    phone_fixture = next(
+        item for item in fixture_manifest["fixtures"] if item["category"] == "phone_photo"
+    )
+    phone_after = after["phone_photo"]
+    assert before["phone_photo"]["normalized_ocr_text"] == ""
+    assert phone_after["normalized_ocr_text"] == normalize_text(
+        phone_fixture["ground_truth_text"]
+    )
+    assert phone_after["cer"] == 0.0
+    assert phone_after["wer"] == 0.0
+    assert phone_after["important_field_accuracy"] == 1.0
