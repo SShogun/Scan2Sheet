@@ -12,6 +12,7 @@ BLUR_VARIANCE_THRESHOLD = 20.0
 LOW_CONTRAST_STDDEV_THRESHOLD = 15.0
 IMPULSE_NOISE_THRESHOLD = 0.01
 UNEVEN_ILLUMINATION_RANGE_THRESHOLD = 40.0
+ILLUMINATION_ANALYSIS_SIZE = 32
 
 
 @dataclass(frozen=True)
@@ -43,12 +44,16 @@ def analyze_quality(gray: np.ndarray, *, orientation_degrees: int = 0) -> Qualit
     p05, p95 = np.percentile(analysis, [5, 95])
     laplacian_variance = float(cv2.Laplacian(analysis, cv2.CV_64F).var())
     stddev = float(np.std(analysis))
-    illumination_sigma = max(15.0, min(analysis.shape[:2]) / 20.0)
-    illumination = cv2.GaussianBlur(
+    illumination_sample = cv2.resize(
         analysis,
+        (ILLUMINATION_ANALYSIS_SIZE, ILLUMINATION_ANALYSIS_SIZE),
+        interpolation=cv2.INTER_AREA,
+    )
+    illumination = cv2.GaussianBlur(
+        illumination_sample,
         (0, 0),
-        sigmaX=illumination_sigma,
-        sigmaY=illumination_sigma,
+        sigmaX=2.0,
+        sigmaY=2.0,
     )
     illumination_p05, illumination_p95 = np.percentile(illumination, [5, 95])
     illumination_range = float(illumination_p95 - illumination_p05)
