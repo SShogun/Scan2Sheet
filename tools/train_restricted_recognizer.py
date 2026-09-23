@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from backend.app.ocr.experimental import MIN_TOKEN_CONFIDENCE, RESTRICTED_VOCABULARY, RestrictedExperimentalEngine, _feature_vector, _segment_glyphs
+from backend.app.ocr.experimental import FEATURE_QUANTIZATION_DECIMALS, MIN_TOKEN_CONFIDENCE, RESTRICTED_VOCABULARY, RestrictedExperimentalEngine, _feature_vector, _segment_glyphs, _stable_distance
 from tools.recognizer_dataset import load_manifest, render_sample, verify_manifest
 
 
@@ -30,10 +30,36 @@ MODEL_MEMBER_ORDER = (
 
 def _classify(glyph, features: np.ndarray, labels: np.ndarray) -> tuple[str, float, float]:
     query = _feature_vector(glyph)
-    distances = np.linalg.norm(features - query, axis=1)
-    ranked = sorted(((label, float(distances[labels == label].min())) for label in sorted(set(labels.tolist()))), key=lambda item: (item[1], item[0]))
+    distances = [_stable_distance(feature, query) for feature in features]
+    ranked = sorted(
+        (
+            (
+                label,
+                min(
+                    distance
+                    for distance, candidate_label in zip(distances, labels, strict=True)
+                    if candidate_label == label
+                ),
+            )
+            for label in sorted(set(labels.tolist()))
+        ),
+        key=lambda item: (item[1], item[0]),
+    )
     (best, d1), (_, d2) = ranked[:2]
     return str(best), d1, float((d2 - d1) / max(d2, 1e-9))
+
+
+def _deterministic_percentile(values: list[float], percentile: float) -> float:
+    ordered = sorted(float(value) for value in values)
+    if not ordered:
+        raise ValueError("Percentile requires at least one value.")
+    if len(ordered) == 1:
+        return ordered[0]
+    position = (len(ordered) - 1) * percentile / 100.0
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    fraction = position - lower
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -83,7 +109,7 @@ def train(train_manifest_path: Path, validation_manifest_path: Path, output_mode
                 raise RuntimeError(f"Out-of-vocabulary training character: {character!r}")
             features.append(_feature_vector(glyph)); labels.append(character)
 
-    matrix = np.stack(features).astype(np.float32); label_array = np.asarray(labels, dtype="<U1")
+    matrix = np.asarray(np.stack(features), dtype="<f4"); label_array = np.asarray(labels, dtype="<U1")
     if set(label_array.tolist()) != set(RESTRICTED_VOCABULARY):
         raise RuntimeError("Training data does not cover the complete restricted vocabulary.")
 
@@ -101,25 +127,31 @@ def train(train_manifest_path: Path, validation_manifest_path: Path, output_mode
 
     same_label = {char: [] for char in RESTRICTED_VOCABULARY}
     for index, (feature, label) in enumerate(zip(matrix, label_array, strict=True)):
-        candidates = np.where(label_array == label)[0]; candidates = candidates[candidates != index]
-        if len(candidates):
-            same_label[str(label)].append(float(np.linalg.norm(matrix[candidates] - feature, axis=1).min()))
+        candidate_distances = [
+            _stable_distance(candidate, feature)
+            for candidate_index, (candidate, candidate_label) in enumerate(
+                zip(matrix, label_array, strict=True)
+            )
+            if candidate_index != index and candidate_label == label
+        ]
+        if candidate_distances:
+            same_label[str(label)].append(min(candidate_distances))
 
     distance_thresholds, margin_thresholds = {}, {}
     for character in RESTRICTED_VOCABULARY:
-        known_max = max(known_distance[character]) if known_distance[character] else (float(np.percentile(same_label[character], 99)) if same_label[character] else 0.25)
+        known_max = max(known_distance[character]) if known_distance[character] else (_deterministic_percentile(same_label[character], 99) if same_label[character] else 0.25)
         distance_threshold = max(0.12, known_max * 1.10 + 0.03)
         if unknown[character]:
             unknown_min = min(distance for distance, _ in unknown[character])
             if unknown_min > known_max:
                 distance_threshold = min(distance_threshold, (known_max + unknown_min) / 2)
-        distance_thresholds[character] = float(distance_threshold)
+        distance_thresholds[character] = round(float(distance_threshold), 6)
         margin_threshold = max(0.03, min(known_margin[character]) * 0.70) if known_margin[character] else 0.08
         if unknown[character] and known_margin[character]:
             unknown_max_margin = max(margin for _, margin in unknown[character]); known_min_margin = min(known_margin[character])
             if known_min_margin > unknown_max_margin:
                 margin_threshold = max(margin_threshold, (known_min_margin + unknown_max_margin) / 2)
-        margin_thresholds[character] = float(margin_threshold)
+        margin_thresholds[character] = round(float(margin_threshold), 6)
 
     class_labels = np.asarray(sorted(RESTRICTED_VOCABULARY), dtype="<U1")
     _write_deterministic_model(
@@ -128,7 +160,7 @@ def train(train_manifest_path: Path, validation_manifest_path: Path, output_mode
             "features": matrix,
             "labels": label_array,
             "class_labels": class_labels,
-            "distance_thresholds": np.asarray([distance_thresholds[label] for label in class_labels], dtype=np.float32),
+            "distance_thresholds": np.asarray([distance_thresholds[label] for label in class_labels], dtype="<f4"),
             "margin_thresholds": np.asarray([margin_thresholds[label] for label in class_labels], dtype=np.float32),
         },
     )
@@ -147,7 +179,7 @@ def train(train_manifest_path: Path, validation_manifest_path: Path, output_mode
         experiment_dir.mkdir(parents=True, exist_ok=True)
         config = {
             "run_id": "m2b-hog-nn-v1", "status": "frozen-before-heldout-evaluation", "engine_name": "experimental-restricted-v1", "scope": "restricted-token", "not_general_purpose_ocr": True, "restricted_vocabulary": RESTRICTED_VOCABULARY,
-            "feature_extractor": {"glyph_canvas": [32, 32], "hog": {"win": [32, 32], "block": [16, 16], "stride": [8, 8], "cell": [8, 8], "bins": 9}, "pixel_thumbnail": [16, 16], "pixel_weight": 0.75, "geometry_weight": 1.5},
+            "feature_extractor": {"glyph_canvas": [32, 32], "hog": {"win": [32, 32], "block": [16, 16], "stride": [8, 8], "cell": [8, 8], "bins": 9}, "pixel_thumbnail": [16, 16], "pixel_weight": 0.75, "geometry_weight": 1.5, "quantization_decimals": FEATURE_QUANTIZATION_DECIMALS},
             "classifier": "1-nearest-neighbor over synthetic glyph features", "segmentation": "single-line vertical ink projection; max 32 glyphs", "threshold_calibration": "train nearest-neighbor distances + validation known/unknown glyphs", "min_token_confidence": MIN_TOKEN_CONFIDENCE,
             "model_file": "artifacts/models/restricted_hog_nn_v1.npz (generated, gitignored)", "model_sha256": digest, "model_committed": False, "runtime_dependencies_added": [], "training_splits": ["train", "validation"], "heldout_test_used_for_selection": False,
         }
