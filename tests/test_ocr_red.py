@@ -78,3 +78,13 @@ def test_red_07_preprocessing_profile_must_be_deterministic(fixture_manifest) ->
     assert first.original_size == second.original_size
     assert first.quality_profile == second.quality_profile
     assert first.transforms_applied == second.transforms_applied
+
+def test_red_08_phone_photo_should_recover_controlled_document(metrics_by_category) -> None:
+    phone_photo = metrics_by_category["phone_photo"]
+    assert float(phone_photo["important_field_accuracy"]) == 1.0, (
+        "RED-08: controlled phone-photo fixture must preserve every important accounting field."
+    )
+    assert float(phone_photo["cer"]) <= 0.05, (
+        f"RED-08: phone-photo CER {float(phone_photo['cer']):.3f} exceeds the controlled-fixture limit."
+    )
+
