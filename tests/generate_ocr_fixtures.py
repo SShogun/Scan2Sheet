@@ -99,7 +99,7 @@ def make_phone_photo(image: Image.Image) -> Image.Image:
     rng = np.random.default_rng(20260919)
     noise = rng.normal(0, 5, shaded.shape).astype(np.int16)
     noisy = np.clip(shaded.astype(np.int16) + noise, 0, 255).astype(np.uint8)
-    return Image.fromarray(noisy, mode="RGB")
+    return Image.fromarray(noisy)
 
 
 def ensure_fixtures() -> None:
