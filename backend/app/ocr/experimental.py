@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 import hashlib
+import math
 import os
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ MODEL_ENV = "SCAN2SHEET_EXPERIMENTAL_MODEL"
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[3] / "artifacts" / "models" / "restricted_hog_nn_v1.npz"
 MAX_GLYPHS = 32
 MIN_TOKEN_CONFIDENCE = 10.0
+FEATURE_QUANTIZATION_DECIMALS = 4
 
 _HOG = cv2.HOGDescriptor((32, 32), (16, 16), (8, 8), (8, 8), 9)
 
@@ -143,30 +145,67 @@ def _normalize_glyph(crop: np.ndarray) -> np.ndarray:
     return canvas
 
 
+def _stable_norm(values: np.ndarray) -> float:
+    flat = np.asarray(values).reshape(-1)
+    return math.sqrt(math.fsum(float(value) * float(value) for value in flat))
+
+
+def _canonicalize_features(values: np.ndarray) -> np.ndarray:
+    rounded = np.round(
+        np.asarray(values, dtype=np.float64),
+        decimals=FEATURE_QUANTIZATION_DECIMALS,
+    )
+    return np.asarray(rounded, dtype="<f4")
+
+
+def _stable_distance(left: np.ndarray, right: np.ndarray) -> float:
+    a = np.asarray(left).reshape(-1)
+    b = np.asarray(right).reshape(-1)
+    if len(a) != len(b):
+        raise ValueError("Feature vectors must have the same length.")
+    squared = math.fsum(
+        (float(x) - float(y)) * (float(x) - float(y))
+        for x, y in zip(a, b, strict=True)
+    )
+    return math.sqrt(squared)
+
+
 def _feature_vector(glyph: tuple[np.ndarray, np.ndarray]) -> np.ndarray:
     crop, geometry = glyph
     normalized = _normalize_glyph(crop)
-    hog = _HOG.compute(normalized).reshape(-1).astype(np.float32)
-    hog_norm = float(np.linalg.norm(hog))
+    hog = _HOG.compute(normalized).reshape(-1).astype(np.float64)
+    hog_norm = _stable_norm(hog)
     if hog_norm:
         hog /= hog_norm
 
-    pixels = cv2.resize(normalized, (16, 16), interpolation=cv2.INTER_AREA).astype(np.float32).reshape(-1) / 255.0
-    pixel_norm = float(np.linalg.norm(pixels))
+    pixels = (
+        cv2.resize(normalized, (16, 16), interpolation=cv2.INTER_AREA)
+        .astype(np.float64)
+        .reshape(-1)
+        / 255.0
+    )
+    pixel_norm = _stable_norm(pixels)
     if pixel_norm:
         pixels /= pixel_norm
 
-    return np.concatenate([hog, pixels * 0.75, geometry.astype(np.float32) * 1.5]).astype(np.float32)
+    combined = np.concatenate(
+        [hog, pixels * 0.75, geometry.astype(np.float64) * 1.5]
+    )
+    return _canonicalize_features(combined)
 
 
 def _classify_glyph(glyph: tuple[np.ndarray, np.ndarray], model: _RestrictedModel) -> tuple[str, float, float]:
     query = _feature_vector(glyph)
-    distances = np.linalg.norm(model.features - query, axis=1)
+    distances = [_stable_distance(feature, query) for feature in model.features]
     by_class: list[tuple[str, float]] = []
     for label in model.distance_thresholds:
-        class_distances = distances[model.labels == label]
-        by_class.append((label, float(class_distances.min())))
-    by_class.sort(key=lambda item: item[1])
+        class_distances = [
+            distance
+            for distance, candidate_label in zip(distances, model.labels, strict=True)
+            if candidate_label == label
+        ]
+        by_class.append((label, min(class_distances)))
+    by_class.sort(key=lambda item: (item[1], item[0]))
     (best_label, best_distance), (_, second_distance) = by_class[:2]
     margin = (second_distance - best_distance) / max(second_distance, 1e-9)
     return best_label, best_distance, float(margin)
