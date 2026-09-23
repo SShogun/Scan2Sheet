@@ -54,7 +54,7 @@ def evaluate(model_path: Path, train_manifest_path: Path, test_manifest_path: Pa
 def main() -> None:
     parser = argparse.ArgumentParser(); parser.add_argument("--model", type=Path, default=Path("artifacts/models/restricted_hog_nn_v1.npz")); parser.add_argument("--train-manifest", type=Path, default=Path("data/recognizer/train/manifest.json")); parser.add_argument("--test-manifest", type=Path, default=Path("data/recognizer/test/manifest.json")); parser.add_argument("--output", type=Path, default=Path("artifacts/benchmarks/current_m2b_recognizer.json")); args = parser.parse_args()
     result = evaluate(args.model, args.train_manifest, args.test_manifest, args.output)
-    print(json.dumps({key: result[key] for key in ("experimental_known_exact_accuracy", "experimental_unknown_abstention_rate", "tesseract_known_exact_accuracy")}, indent=2))
+    print(json.dumps(result, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":
