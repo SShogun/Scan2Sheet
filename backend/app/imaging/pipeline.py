@@ -31,7 +31,8 @@ def _canonical_grayscale(image: Image.Image) -> np.ndarray:
     return cv2.cvtColor(np.asarray(rgb), cv2.COLOR_RGB2GRAY)
 
 
-_PAGE_QUAD_MIN_AREA_RATIO = 0.35
+_PAGE_QUAD_MIN_AREA_RATIO = 0.50
+_PAGE_QUAD_MIN_SPAN_RATIO = 0.70
 
 
 def _detect_page_quadrilateral(gray: np.ndarray) -> np.ndarray | None:
@@ -49,6 +50,13 @@ def _detect_page_quadrilateral(gray: np.ndarray) -> np.ndarray | None:
         perimeter = cv2.arcLength(contour, True)
         approximation = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
         if len(approximation) != 4 or not cv2.isContourConvex(approximation):
+            continue
+
+        _, _, span_width, span_height = cv2.boundingRect(approximation)
+        if (
+            span_width / analysis.shape[1] < _PAGE_QUAD_MIN_SPAN_RATIO
+            or span_height / analysis.shape[0] < _PAGE_QUAD_MIN_SPAN_RATIO
+        ):
             continue
 
         points = approximation.reshape(4, 2).astype(np.float32)
