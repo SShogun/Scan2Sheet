@@ -357,7 +357,7 @@
   "experimental_known_exact_accuracy": 0.3333333333333333,
   "experimental_unknown_abstention_rate": 1.0,
   "known_samples": 15,
-  "model_sha256": "cf62b17e27b145ae124a36f6ee4816224ce0a27aa05b0ee1b1aeb62fd8195dd9",
+  "model_sha256": "04791dcb1bcb6ed2594e338537a8f5e1b9dc804c6100e9280821142aa03cdedd",
   "tesseract_known_exact_accuracy": 0.5333333333333333,
   "unknown_samples": 7
 }
