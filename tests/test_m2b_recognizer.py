@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import zipfile
 
 import pytest
 from PIL import Image
@@ -12,7 +13,7 @@ from backend.app.ocr.router import OCRRouter
 from backend.app.ocr.types import OCRResult
 from tools.evaluate_restricted_recognizer import evaluate
 from tools.recognizer_dataset import load_manifest, render_sample
-from tools.train_restricted_recognizer import train
+from tools.train_restricted_recognizer import MODEL_ARCHIVE_TIMESTAMP, MODEL_MEMBER_ORDER, train
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -201,6 +202,36 @@ def test_model_hash_matches_frozen_test_manifest(
 
     assert actual == EXPECTED_MODEL_HASH
     assert test_manifest["frozen_model_sha256"] == EXPECTED_MODEL_HASH
+
+
+def test_model_archive_has_canonical_metadata(
+    reproduced_model: Path,
+) -> None:
+    with zipfile.ZipFile(reproduced_model) as archive:
+        entries = archive.infolist()
+
+    assert [entry.filename for entry in entries] == [
+        f"{name}.npy" for name in MODEL_MEMBER_ORDER
+    ]
+    assert all(entry.compress_type == zipfile.ZIP_STORED for entry in entries)
+    assert all(entry.date_time == MODEL_ARCHIVE_TIMESTAMP for entry in entries)
+    assert all(entry.create_system == 3 for entry in entries)
+    assert all(entry.external_attr == 0o600 << 16 for entry in entries)
+
+
+def test_model_generation_is_byte_stable(
+    reproduced_model: Path,
+    tmp_path: Path,
+) -> None:
+    second_model = tmp_path / "restricted_hog_nn_v1-second.npz"
+    second_hash = train(
+        ROOT / "data/recognizer/train/manifest.json",
+        ROOT / "data/recognizer/validation/manifest.json",
+        second_model,
+    )
+
+    assert second_hash == EXPECTED_MODEL_HASH
+    assert second_model.read_bytes() == reproduced_model.read_bytes()
 
 
 def test_trainer_does_not_read_heldout_test_manifest() -> None:

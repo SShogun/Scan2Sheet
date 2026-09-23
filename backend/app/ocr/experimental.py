@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-import cv2
 import numpy as np
 from PIL import Image
 
@@ -21,15 +20,18 @@ DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[3] / "artifacts" / "models
 MAX_GLYPHS = 32
 MIN_TOKEN_CONFIDENCE = 10.0
 
-_HOG = cv2.HOGDescriptor((32, 32), (16, 16), (8, 8), (8, 8), 9)
+_BINARY_THRESHOLD = 200
+_GEOMETRY_SCALE = 1000
+_PIXEL_BLOCK_SCALE = 250
+_MARGIN_SCALE = 10_000
 
 
 @dataclass(frozen=True)
 class _RestrictedModel:
     features: np.ndarray
     labels: np.ndarray
-    distance_thresholds: dict[str, float]
-    margin_thresholds: dict[str, float]
+    distance_thresholds: dict[str, int]
+    margin_thresholds: dict[str, int]
     sha256: str
 
 
@@ -52,11 +54,11 @@ def _load_model(model_path: str) -> _RestrictedModel:
     payload = path.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     with np.load(path, allow_pickle=False) as data:
-        features = np.asarray(data["features"], dtype=np.float32)
+        features = np.asarray(data["features"], dtype="<i2")
         labels = np.asarray(data["labels"]).astype("<U1")
         class_labels = np.asarray(data["class_labels"]).astype("<U1")
-        distances = np.asarray(data["distance_thresholds"], dtype=np.float32)
-        margins = np.asarray(data["margin_thresholds"], dtype=np.float32)
+        distances = np.asarray(data["distance_thresholds"], dtype="<i8")
+        margins = np.asarray(data["margin_thresholds"], dtype="<i4")
 
     if features.ndim != 2 or len(features) != len(labels):
         raise ValueError("Invalid restricted recognizer model shape.")
@@ -70,16 +72,27 @@ def _load_model(model_path: str) -> _RestrictedModel:
     return _RestrictedModel(
         features=features,
         labels=labels,
-        distance_thresholds={str(label): float(value) for label, value in zip(class_labels, distances, strict=True)},
-        margin_thresholds={str(label): float(value) for label, value in zip(class_labels, margins, strict=True)},
+        distance_thresholds={
+            str(label): int(value)
+            for label, value in zip(class_labels, distances, strict=True)
+        },
+        margin_thresholds={
+            str(label): int(value)
+            for label, value in zip(class_labels, margins, strict=True)
+        },
         sha256=digest,
     )
 
 
+def _scaled_ratio(numerator: int, denominator: int, scale: int = _GEOMETRY_SCALE) -> int:
+    if denominator <= 0:
+        return 0
+    return (int(numerator) * scale + denominator // 2) // denominator
+
+
 def _binarize(image: Image.Image) -> np.ndarray:
-    gray = np.asarray(image.convert("L"))
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    return binary
+    gray = np.asarray(image.convert("L"), dtype=np.uint8)
+    return (gray < _BINARY_THRESHOLD).astype(np.uint8)
 
 
 def _segment_glyphs(image: Image.Image) -> list[tuple[np.ndarray, np.ndarray]]:
@@ -101,7 +114,7 @@ def _segment_glyphs(image: Image.Image) -> list[tuple[np.ndarray, np.ndarray]]:
     if start is not None:
         runs.append((start, len(active)))
 
-    line_height = max(1, line.shape[0])
+    line_height = max(1, int(line.shape[0]))
     glyphs: list[tuple[np.ndarray, np.ndarray]] = []
     for left, right in runs:
         full = line[:, left:right]
@@ -109,18 +122,38 @@ def _segment_glyphs(image: Image.Image) -> list[tuple[np.ndarray, np.ndarray]]:
         if len(gx) == 0:
             continue
         tight = full[gy.min() : gy.max() + 1, gx.min() : gx.max() + 1]
-        geometry = np.array(
+        ink_pixels = int(np.count_nonzero(tight))
+        geometry = np.asarray(
             [
-                gy.min() / line_height,
-                (gy.max() + 1) / line_height,
-                tight.shape[1] / line_height,
-                tight.shape[0] / line_height,
-                float((tight > 0).mean()),
+                _scaled_ratio(int(gy.min()), line_height),
+                _scaled_ratio(int(gy.max()) + 1, line_height),
+                _scaled_ratio(int(tight.shape[1]), line_height),
+                _scaled_ratio(int(tight.shape[0]), line_height),
+                _scaled_ratio(ink_pixels, int(tight.size)),
             ],
-            dtype=np.float32,
+            dtype="<i2",
         )
         glyphs.append((tight, geometry))
     return glyphs
+
+
+def _fit_size(width: int, height: int) -> tuple[int, int]:
+    if width <= 0 or height <= 0:
+        return 1, 1
+    if 24 * height <= 26 * width:
+        new_width = 24
+        new_height = max(1, min(26, (height * 24 + width // 2) // width))
+    else:
+        new_height = 26
+        new_width = max(1, min(24, (width * 26 + height // 2) // height))
+    return new_width, new_height
+
+
+def _resize_nearest(binary: np.ndarray, width: int, height: int) -> np.ndarray:
+    source_height, source_width = binary.shape
+    x_indices = (np.arange(width, dtype=np.int64) * source_width) // width
+    y_indices = (np.arange(height, dtype=np.int64) * source_height) // height
+    return binary[y_indices[:, None], x_indices[None, :]].astype(np.uint8, copy=False)
 
 
 def _normalize_glyph(crop: np.ndarray) -> np.ndarray:
@@ -129,12 +162,8 @@ def _normalize_glyph(crop: np.ndarray) -> np.ndarray:
         return np.zeros((32, 32), dtype=np.uint8)
 
     tight = crop[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
-    height, width = tight.shape
-    scale = min(24 / max(width, 1), 26 / max(height, 1))
-    new_width = max(1, int(round(width * scale)))
-    new_height = max(1, int(round(height * scale)))
-    interpolation = cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC
-    resized = cv2.resize(tight, (new_width, new_height), interpolation=interpolation)
+    new_width, new_height = _fit_size(int(tight.shape[1]), int(tight.shape[0]))
+    resized = _resize_nearest(tight, new_width, new_height)
 
     canvas = np.zeros((32, 32), dtype=np.uint8)
     x = (32 - new_width) // 2
@@ -146,30 +175,49 @@ def _normalize_glyph(crop: np.ndarray) -> np.ndarray:
 def _feature_vector(glyph: tuple[np.ndarray, np.ndarray]) -> np.ndarray:
     crop, geometry = glyph
     normalized = _normalize_glyph(crop)
-    hog = _HOG.compute(normalized).reshape(-1).astype(np.float32)
-    hog_norm = float(np.linalg.norm(hog))
-    if hog_norm:
-        hog /= hog_norm
 
-    pixels = cv2.resize(normalized, (16, 16), interpolation=cv2.INTER_AREA).astype(np.float32).reshape(-1) / 255.0
-    pixel_norm = float(np.linalg.norm(pixels))
-    if pixel_norm:
-        pixels /= pixel_norm
-
-    return np.concatenate([hog, pixels * 0.75, geometry.astype(np.float32) * 1.5]).astype(np.float32)
+    block_counts = (
+        normalized.reshape(16, 2, 16, 2)
+        .sum(axis=(1, 3), dtype=np.int16)
+        .reshape(-1)
+    )
+    pixel_features = block_counts * _PIXEL_BLOCK_SCALE
+    return np.concatenate([pixel_features, geometry]).astype("<i2", copy=False)
 
 
-def _classify_glyph(glyph: tuple[np.ndarray, np.ndarray], model: _RestrictedModel) -> tuple[str, float, float]:
+def _squared_distance(left: np.ndarray, right: np.ndarray) -> int:
+    a = np.asarray(left).reshape(-1)
+    b = np.asarray(right).reshape(-1)
+    if len(a) != len(b):
+        raise ValueError("Feature vectors must have the same length.")
+    return sum(
+        (int(x) - int(y)) * (int(x) - int(y))
+        for x, y in zip(a, b, strict=True)
+    )
+
+
+def _margin_score(best_distance: int, second_distance: int) -> int:
+    if second_distance <= 0:
+        return 0
+    return (
+        max(0, int(second_distance) - int(best_distance)) * _MARGIN_SCALE
+    ) // int(second_distance)
+
+
+def _classify_glyph(glyph: tuple[np.ndarray, np.ndarray], model: _RestrictedModel) -> tuple[str, int, int]:
     query = _feature_vector(glyph)
-    distances = np.linalg.norm(model.features - query, axis=1)
-    by_class: list[tuple[str, float]] = []
+    distances = [_squared_distance(feature, query) for feature in model.features]
+    by_class: list[tuple[str, int]] = []
     for label in model.distance_thresholds:
-        class_distances = distances[model.labels == label]
-        by_class.append((label, float(class_distances.min())))
-    by_class.sort(key=lambda item: item[1])
+        class_distances = [
+            distance
+            for distance, candidate_label in zip(distances, model.labels, strict=True)
+            if candidate_label == label
+        ]
+        by_class.append((label, min(class_distances)))
+    by_class.sort(key=lambda item: (item[1], item[0]))
     (best_label, best_distance), (_, second_distance) = by_class[:2]
-    margin = (second_distance - best_distance) / max(second_distance, 1e-9)
-    return best_label, best_distance, float(margin)
+    return best_label, best_distance, _margin_score(best_distance, second_distance)
 
 
 class RestrictedExperimentalEngine:
@@ -203,12 +251,23 @@ class RestrictedExperimentalEngine:
                     "unknown_or_uncertain",
                     model_sha256=model.sha256,
                     predicted_label=label,
-                    distance=round(distance, 6),
-                    margin=round(margin, 6),
+                    distance_squared=distance,
+                    margin=round(margin / _MARGIN_SCALE, 6),
                 )
 
-            distance_score = max(0.0, min(1.0, 1.0 - distance / max(distance_threshold, 1e-6)))
-            margin_score = max(0.0, min(1.0, margin / max(margin_threshold * 4, 0.3)))
+            distance_score = max(
+                0.0,
+                min(1.0, 1.0 - distance / max(distance_threshold, 1)),
+            )
+            margin_ratio = margin / _MARGIN_SCALE
+            margin_threshold_ratio = margin_threshold / _MARGIN_SCALE
+            margin_score = max(
+                0.0,
+                min(
+                    1.0,
+                    margin_ratio / max(margin_threshold_ratio * 4, 0.3),
+                ),
+            )
             confidence = 100.0 * (0.65 * distance_score + 0.35 * margin_score)
             output.append(label)
             confidences.append(confidence)
