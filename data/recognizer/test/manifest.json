@@ -1,6 +1,6 @@
 {
   "expanded_samples_sha256": "f3746fb84530a581b58975a31073431d0ab8bc6912f444452462637e28324fb9",
-  "frozen_model_sha256": "cf62b17e27b145ae124a36f6ee4816224ce0a27aa05b0ee1b1aeb62fd8195dd9",
+  "frozen_model_sha256": "04791dcb1bcb6ed2594e338537a8f5e1b9dc804c6100e9280821142aa03cdedd",
   "generator": "tools/recognizer_dataset.py",
   "purpose": "final held-out evaluation only; not used for model selection",
   "restricted_vocabulary": "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,/-:",
