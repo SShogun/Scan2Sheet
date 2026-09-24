@@ -65,11 +65,13 @@ def _extract_invoice_amount(lines: list[str], labels: list[str], is_total: bool 
     if match_idx == -1:
         return None
         
-    amounts = []
-    # Look at the matching line and the next 3 lines for amounts
-    for i in range(match_idx, min(len(lines), match_idx + 4)):
-        amounts.extend(AMOUNT_PATTERN.findall(lines[i]))
-        
+    # Prefer the amount printed on the matched label line. Only fall back to
+    # nearby lines for layouts that place a label and its value on separate rows.
+    amounts = AMOUNT_PATTERN.findall(lines[match_idx])
+    if not amounts:
+        for i in range(match_idx + 1, min(len(lines), match_idx + 4)):
+            amounts.extend(AMOUNT_PATTERN.findall(lines[i]))
+
     if not amounts:
         return None
         
