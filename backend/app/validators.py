@@ -132,6 +132,9 @@ def _build_warnings(document_type: str, fields: dict[str, str], rows: list[dict[
 
 def _compute_confidence(ocr_confidence: float, fields: dict[str, str], rows: list[dict[str, str]]) -> float:
     extraction_hits = len(fields) + len(rows)
+    if extraction_hits == 0:
+        return 0.0
+
     coverage_score = min(1.0, extraction_hits / 8.0)
     ocr_score = max(0.0, min(1.0, ocr_confidence / 100.0))
     return round(max(0.0, min(1.0, (ocr_score * 0.7) + (coverage_score * 0.3))), 4)

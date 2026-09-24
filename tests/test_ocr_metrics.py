@@ -38,3 +38,20 @@ Grand Total: 11800.00"""
         "total": "11800.00",
     }
 
+def test_empty_extraction_confidence_is_zero_even_with_readable_ocr():
+    from backend.app.validators import _compute_confidence
+
+    assert _compute_confidence(100.0, {}, []) == 0.0
+
+
+def test_supported_extraction_confidence_formula_is_unchanged():
+    from backend.app.validators import _compute_confidence
+
+    fields = {
+        "gstin": "27ABCDE1234F1Z5",
+        "invoice_number": "INV-102",
+        "date": "12/04/2025",
+        "taxable_amount": "10000.00",
+    }
+    assert _compute_confidence(80.0, fields, []) == 0.71
+
